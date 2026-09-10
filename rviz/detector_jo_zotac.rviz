@@ -59,7 +59,7 @@ Visualization Manager:
       Axes Radius: 0.10000000149011612
       Class: rviz_default_plugins/Pose
       Color: 255; 25; 0
-      Enabled: true
+      Enabled: false
       Head Length: 0.30000001192092896
       Head Radius: 0.10000000149011612
       Name: Robot Pose
@@ -73,7 +73,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /pose
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
       Name: Visual DBSCAN BBoxes
@@ -159,7 +159,7 @@ Visualization Manager:
         Value: /onboard_detector/tracked_bboxes
       Value: true
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: Tracked Dynamic Obstacles BBoxes
       Namespaces:
         box3D: true
@@ -169,7 +169,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /onboard_detector/tracked_dynamic_obstacles_bboxes
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
       Name: KF Predicted - Active (orange)
@@ -181,7 +181,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /onboard_detector/predicted_bboxes_active
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
       Name: KF Predicted - Missed/Coasting (red)
@@ -193,7 +193,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /onboard_detector/predicted_bboxes_missed
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
       Name: KF Predicted - Unconfirmed (gray)
@@ -205,9 +205,9 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /onboard_detector/predicted_bboxes_unconfirmed
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: Dynamic Obstacles BBoxes
       Namespaces:
         box3D: true
@@ -217,9 +217,9 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /onboard_detector/dynamic_bboxes
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: Potentially Dynamic BBoxes (green)
       Namespaces:
         box3D: true
@@ -229,9 +229,9 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /onboard_detector/potentially_dynamic_bboxes
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: History Trajectories
       Namespaces:
         {}
@@ -241,7 +241,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /onboard_detector/history_trajectories
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
       Name: Velocity Info

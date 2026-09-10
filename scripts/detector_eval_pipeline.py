@@ -13,10 +13,11 @@ Status constants (Obstacle.msg):
     STATUS_TRACKED             = 3
 
 GT label derivato dalla velocità assoluta della persona in world frame (Qualisys):
-    |v_persona| >  dyn_vel_thresh  →  GT = DYNAMIC
-    |v_persona| <= dyn_vel_thresh  →  GT = POTENTIALLY_DYNAMIC
+    |v_persona| >  dyn_vel_thresh     →  GT = DYNAMIC
+    |v_persona| <= static_vel_thresh  →  GT = STATIC
+    altrimenti                        →  GT = POTENTIALLY_DYNAMIC
 
-Per ogni esperimento vengono calcolati (per classe DYNAMIC e POTENTIALLY_DYNAMIC):
+Per ogni esperimento vengono calcolati (per classe DYNAMIC, POTENTIALLY_DYNAMIC e STATIC):
     Precision, Recall, F1, Accuracy + detection rate complessiva.
 
 Uso:
@@ -62,7 +63,7 @@ STATUS_POTENTIALLY_DYNAMIC = 2
 STATUS_TRACKED             = 3
 NOT_DETECTED               = -1
 
-GT_CLASSES = (STATUS_DYNAMIC, STATUS_POTENTIALLY_DYNAMIC)
+GT_CLASSES = (STATUS_DYNAMIC, STATUS_POTENTIALLY_DYNAMIC, STATUS_STATIC)
 PRED_CLASSES = (STATUS_DYNAMIC, STATUS_POTENTIALLY_DYNAMIC, STATUS_STATIC, NOT_DETECTED)
 LABEL_MAP = {
     STATUS_DYNAMIC: 'DYNAMIC',
@@ -951,6 +952,8 @@ def evaluate(detector_frames: list,
              t_start_offset: float,
              match_dist_thresh: float,
              dyn_vel_thresh: float,
+             static_vel_thresh: float,
+             force_no_gt_potentially_dynamic: bool,
              t_max_diff: float,
              time_mode: str,
              gt_time_offset: float) -> dict:
@@ -959,7 +962,7 @@ def evaluate(detector_frames: list,
 
     Ritorna dizionario con:
         records: lista di dict per ogni frame valutato
-        counters: {DYNAMIC: {tp,fp,fn,tn}, POTENTIALLY_DYNAMIC: {tp,fp,fn,tn}}
+        counters: {DYNAMIC/POTENTIALLY_DYNAMIC/STATIC: {tp,fp,fn,tn}}
         detection_total, detection_found
     """
     if not detector_frames or not person_positions:
@@ -969,10 +972,7 @@ def evaluate(detector_frames: list,
     t_gt_start  = person_positions[0][0]
     t_abs_start = max(t_det_start, t_gt_start) + t_start_offset
 
-    counters = {
-        STATUS_DYNAMIC:             {'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0},
-        STATUS_POTENTIALLY_DYNAMIC: {'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0},
-    }
+    counters = {cls: {'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0} for cls in GT_CLASSES}
     confusion = {
         gt_cls: {pred_cls: 0 for pred_cls in PRED_CLASSES}
         for gt_cls in GT_CLASSES
@@ -980,6 +980,31 @@ def evaluate(detector_frames: list,
     records = []
     detection_total = 0
     detection_found = 0
+    classification_total = 0
+
+    def add_sample(gt_label, pred_label, record):
+        nonlocal classification_total
+        if pred_label not in PRED_CLASSES:
+            pred_label = NOT_DETECTED
+            record['pred_label'] = pred_label
+        confusion[gt_label][pred_label] += 1
+        classification_total += 1
+
+        # One-vs-rest counters. The multiclass confusion matrix remains the
+        # primary output, while these preserve per-class precision/recall.
+        for cls in GT_CLASSES:
+            gt_pos_cls   = (gt_label == cls)
+            pred_pos_cls = (pred_label == cls)
+            if gt_pos_cls and pred_pos_cls:
+                counters[cls]['tp'] += 1
+            elif not gt_pos_cls and pred_pos_cls:
+                counters[cls]['fp'] += 1
+            elif gt_pos_cls and not pred_pos_cls:
+                counters[cls]['fn'] += 1
+            else:
+                counters[cls]['tn'] += 1
+
+        records.append(record)
 
     for t_det, obstacles in detector_frames:
         if time_mode == "relative":
@@ -999,49 +1024,46 @@ def evaluate(detector_frames: list,
             continue  # fuori dal range Qualisys
 
         gt_speed = interp_speed(person_velocities, t_gt)
-        gt_label = STATUS_DYNAMIC if gt_speed > dyn_vel_thresh else STATUS_POTENTIALLY_DYNAMIC
+        if gt_speed > dyn_vel_thresh:
+            gt_label = STATUS_DYNAMIC
+        elif force_no_gt_potentially_dynamic:
+            gt_label = STATUS_DYNAMIC
+        elif gt_speed <= static_vel_thresh:
+            gt_label = STATUS_STATIC
+        else:
+            gt_label = STATUS_POTENTIALLY_DYNAMIC
 
-        # Trova l'ostacolo più vicino alla persona
-        best_obs  = None
+        # Trova l'ostacolo più vicino alla persona. Solo questa box può essere
+        # associata al target dinamico/PD; le altre predizioni del frame sono
+        # trattate come GT STATIC, cioè come detections su background/oggetti
+        # non corrispondenti alla persona target.
+        best_idx = -1
+        best_obs = None
         best_dist = float('inf')
-        for obs in obstacles:
+        obstacle_distances = []
+        for idx, obs in enumerate(obstacles):
             d = np.sqrt((obs['x'] - gt_pos[0])**2 +
                         (obs['y'] - gt_pos[1])**2)
+            obstacle_distances.append(d)
             if d < best_dist:
                 best_dist = d
                 best_obs  = obs
+                best_idx = idx
 
         detection_total += 1
+        matched_idx = -1
         if best_obs is not None and best_dist <= match_dist_thresh:
             pred_label = best_obs['status']
             # TRACKED is not a classifier output; collapse it into STATIC
             if pred_label == STATUS_TRACKED:
                 pred_label = STATUS_STATIC
             detection_found += 1
+            matched_idx = best_idx
         else:
             pred_label = NOT_DETECTED
 
-        if pred_label not in PRED_CLASSES:
-            pred_label = NOT_DETECTED
-        confusion[gt_label][pred_label] += 1
-
-        # Contatori one-vs-rest mantenuti per compatibilità con i vecchi CSV.
-        # La valutazione principale del classificatore è invece la confusion
-        # matrix multiclass: GT ∈ {DYNAMIC, POTENTIALLY_DYNAMIC}; prediction ∈
-        # {DYNAMIC, POTENTIALLY_DYNAMIC, TRACKED, NOT_DETECTED}.
-        for cls in (STATUS_DYNAMIC, STATUS_POTENTIALLY_DYNAMIC):
-            gt_pos_cls   = (gt_label == cls)
-            pred_pos_cls = (pred_label == cls)
-            if gt_pos_cls and pred_pos_cls:
-                counters[cls]['tp'] += 1
-            elif not gt_pos_cls and pred_pos_cls:
-                counters[cls]['fp'] += 1
-            elif gt_pos_cls and not pred_pos_cls:
-                counters[cls]['fn'] += 1
-            else:
-                counters[cls]['tn'] += 1
-
-        records.append({
+        add_sample(gt_label, pred_label, {
+            'sample_type':    'target',
             't':            t_det,
             't_rel':        t_rel,
             't_gt':         t_gt,
@@ -1059,32 +1081,125 @@ def evaluate(detector_frames: list,
             'track_age':    best_obs['track_age'] if best_obs is not None else -1,
         })
 
+        for idx, obs in enumerate(obstacles):
+            if idx == matched_idx:
+                continue
+
+            static_pred_label = obs['status']
+            if static_pred_label == STATUS_TRACKED:
+                static_pred_label = STATUS_STATIC
+            if static_pred_label not in PRED_CLASSES:
+                static_pred_label = NOT_DETECTED
+
+            add_sample(STATUS_STATIC, static_pred_label, {
+                'sample_type':    'unmatched_prediction',
+                't':              t_det,
+                't_rel':          t_rel,
+                't_gt':           t_gt,
+                'gt_label':       STATUS_STATIC,
+                'pred_label':     static_pred_label,
+                'gt_speed':       float('nan'),
+                'match_dist':     obstacle_distances[idx] if idx < len(obstacle_distances) else float('nan'),
+                'gt_x':           float('nan'),
+                'gt_y':           float('nan'),
+                'pred_x':         obs['x'],
+                'pred_y':         obs['y'],
+                'pred_vx':        obs['vx'],
+                'pred_vy':        obs['vy'],
+                'track_id':       obs['track_id'],
+                'track_age':      obs['track_age'],
+            })
+
     return {
-        'records':          records,
-        'counters':         counters,
-        'confusion':        confusion,
-        'detection_total':  detection_total,
-        'detection_found':  detection_found,
+        'records':               records,
+        'counters':              counters,
+        'confusion':             confusion,
+        'detection_total':       detection_total,
+        'detection_found':       detection_found,
+        'classification_total':  classification_total,
     }
 
 
 def compute_metrics(c: dict) -> dict:
     tp, fp, fn, tn = c['tp'], c['fp'], c['fn'], c['tn']
     total = tp + fp + fn + tn
-    precision = tp / (tp + fp) if (tp + fp) > 0 else float('nan')
-    recall    = tp / (tp + fn) if (tp + fn) > 0 else float('nan')
+    support = tp + fn
+    predicted = tp + fp
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall    = tp / (tp + fn) if (tp + fn) > 0 else 0.0
     f1 = (2 * precision * recall / (precision + recall)
-          if (precision + recall) > 0 else float('nan'))
+          if (precision + recall) > 0 else 0.0)
     accuracy  = (tp + tn) / total if total > 0 else float('nan')
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    balanced_accuracy = (
+        (recall + specificity) / 2 if total > 0 else float('nan')
+    )
     return {'precision': precision, 'recall': recall, 'f1': f1, 'accuracy': accuracy,
+            'specificity': specificity, 'balanced_accuracy': balanced_accuracy,
+            'support': support, 'predicted': predicted,
             'tp': tp, 'fp': fp, 'fn': fn, 'tn': tn}
+
+
+def summarize_results(results: dict) -> dict:
+    per_class = {cls: compute_metrics(results['counters'][cls]) for cls in GT_CLASSES}
+
+    correct = sum(results['confusion'][cls][cls] for cls in GT_CLASSES)
+    total = results['classification_total']
+    detection_rate = (
+        results['detection_found'] / results['detection_total']
+        if results['detection_total'] > 0 else float('nan')
+    )
+
+    return {
+        'per_class': per_class,
+        'detection_rate': detection_rate,
+        'micro_accuracy': correct / total if total > 0 else float('nan'),
+        'correct': correct,
+        'classification_total': total,
+        # Unweighted macro metrics: every GT label has the same weight,
+        # independently from its support in the dataset.
+        'macro_precision': sum(per_class[cls]['precision'] for cls in GT_CLASSES) / len(GT_CLASSES),
+        'macro_recall': sum(per_class[cls]['recall'] for cls in GT_CLASSES) / len(GT_CLASSES),
+        'macro_f1': sum(per_class[cls]['f1'] for cls in GT_CLASSES) / len(GT_CLASSES),
+        'balanced_accuracy': sum(per_class[cls]['recall'] for cls in GT_CLASSES) / len(GT_CLASSES),
+        'multiclass_mcc': compute_multiclass_mcc(results['confusion']),
+    }
+
+
+def compute_multiclass_mcc(confusion: dict) -> float:
+    """Multiclass Matthews correlation coefficient.
+
+    The confusion matrix includes NOT_DETECTED as a prediction-only label with
+    zero GT support, so missed target detections are penalized explicitly.
+    """
+    labels = (STATUS_DYNAMIC, STATUS_POTENTIALLY_DYNAMIC, STATUS_STATIC, NOT_DETECTED)
+    matrix = np.zeros((len(labels), len(labels)), dtype=float)
+    label_to_idx = {label: idx for idx, label in enumerate(labels)}
+
+    for gt_label in GT_CLASSES:
+        row = confusion[gt_label]
+        for pred_label in labels:
+            matrix[label_to_idx[gt_label], label_to_idx[pred_label]] = row.get(pred_label, 0)
+
+    samples = matrix.sum()
+    if samples <= 0:
+        return float('nan')
+
+    trace = np.trace(matrix)
+    pred_totals = matrix.sum(axis=0)
+    true_totals = matrix.sum(axis=1)
+    cov_ytyp = trace * samples - np.dot(pred_totals, true_totals)
+    cov_ypyp = samples ** 2 - np.dot(pred_totals, pred_totals)
+    cov_ytyt = samples ** 2 - np.dot(true_totals, true_totals)
+    denom = math.sqrt(cov_ypyp * cov_ytyt)
+    return cov_ytyp / denom if denom > 0 else 0.0
 
 
 # ── Output ────────────────────────────────────────────────────────────────────
 
 def print_results(exp_name: str, results: dict, dyn_vel_thresh: float):
-    det_rate = (results['detection_found'] / results['detection_total']
-                if results['detection_total'] > 0 else float('nan'))
+    summary = summarize_results(results)
+    det_rate = summary['detection_rate']
 
     print(f"\n{'═'*60}")
     print(f"  Esperimento: {exp_name}")
@@ -1097,23 +1212,27 @@ def print_results(exp_name: str, results: dict, dyn_vel_thresh: float):
     print("    GT \\ Pred             DYNAMIC  POT_DYN   STATIC  NOT_DET")
     for gt_cls in GT_CLASSES:
         row = results['confusion'][gt_cls]
-        gt_name = 'DYNAMIC' if gt_cls == STATUS_DYNAMIC else 'POTENTIALLY_DYNAMIC'
+        gt_name = LABEL_MAP[gt_cls]
         print(f"    {gt_name:22s}"
               f"{row[STATUS_DYNAMIC]:8d}"
               f"{row[STATUS_POTENTIALLY_DYNAMIC]:9d}"
               f"{row[STATUS_STATIC]:9d}"
               f"{row[NOT_DETECTED]:9d}")
-    correct = sum(results['confusion'][cls][cls] for cls in GT_CLASSES)
-    total = results['detection_total']
-    multiclass_acc = correct / total if total > 0 else float('nan')
-    print(f"    Accuracy multiclass: {correct}/{total} ({multiclass_acc:.3f})")
+    print(f"    Accuracy multiclass: {summary['correct']}/{summary['classification_total']} "
+          f"({summary['micro_accuracy']:.3f})")
+    print(f"    Macro Precision={summary['macro_precision']:.3f}  "
+          f"Macro Recall={summary['macro_recall']:.3f}  "
+          f"Macro F1={summary['macro_f1']:.3f}  "
+          f"MCC={summary['multiclass_mcc']:.3f}")
     print(f"{'─'*60}")
 
     for cls, label in ((STATUS_DYNAMIC,             'DYNAMIC'),
-                       (STATUS_POTENTIALLY_DYNAMIC, 'POTENTIALLY_DYNAMIC')):
-        m = compute_metrics(results['counters'][cls])
+                       (STATUS_POTENTIALLY_DYNAMIC, 'POTENTIALLY_DYNAMIC'),
+                       (STATUS_STATIC,              'STATIC')):
+        m = summary['per_class'][cls]
         print(f"  [{label}]")
-        print(f"    TP={m['tp']:4d}  FP={m['fp']:4d}  FN={m['fn']:4d}  TN={m['tn']:4d}")
+        print(f"    TP={m['tp']:4d}  FP={m['fp']:4d}  FN={m['fn']:4d}  TN={m['tn']:4d}  "
+              f"Support={m['support']:4d}")
         print(f"    Precision={m['precision']:.3f}  Recall={m['recall']:.3f}  "
               f"F1={m['f1']:.3f}  Accuracy={m['accuracy']:.3f}")
 
@@ -1122,23 +1241,47 @@ def print_results(exp_name: str, results: dict, dyn_vel_thresh: float):
 
 def save_csv(out_dir: str, exp_name: str, results: dict, dyn_vel_thresh: float):
     os.makedirs(out_dir, exist_ok=True)
-    det_rate = (results['detection_found'] / results['detection_total']
-                if results['detection_total'] > 0 else float('nan'))
+    summary = summarize_results(results)
+    det_rate = summary['detection_rate']
 
     summary_path = os.path.join(out_dir, f"{exp_name}_metrics.csv")
     with open(summary_path, 'w', newline='') as f:
         w = csv.writer(f)
         w.writerow(['experiment', 'class', 'tp', 'fp', 'fn', 'tn',
+                    'support', 'predicted',
                     'precision', 'recall', 'f1', 'accuracy',
-                    'detection_rate', 'frames_evaluated'])
+                    'specificity', 'balanced_accuracy',
+                    'detection_rate', 'frames_evaluated',
+                    'classification_samples'])
         for cls, label in ((STATUS_DYNAMIC,             'DYNAMIC'),
-                           (STATUS_POTENTIALLY_DYNAMIC, 'POTENTIALLY_DYNAMIC')):
-            m = compute_metrics(results['counters'][cls])
+                           (STATUS_POTENTIALLY_DYNAMIC, 'POTENTIALLY_DYNAMIC'),
+                           (STATUS_STATIC,              'STATIC')):
+            m = summary['per_class'][cls]
             w.writerow([exp_name, label,
                         m['tp'], m['fp'], m['fn'], m['tn'],
+                        m['support'], m['predicted'],
                         f"{m['precision']:.4f}", f"{m['recall']:.4f}",
                         f"{m['f1']:.4f}", f"{m['accuracy']:.4f}",
-                        f"{det_rate:.4f}", results['detection_total']])
+                        f"{m['specificity']:.4f}", f"{m['balanced_accuracy']:.4f}",
+                        f"{det_rate:.4f}", results['detection_total'],
+                        results['classification_total']])
+        w.writerow([exp_name, 'MACRO_AVERAGE', '', '', '', '', '', '',
+                    f"{summary['macro_precision']:.4f}",
+                    f"{summary['macro_recall']:.4f}",
+                    f"{summary['macro_f1']:.4f}",
+                    f"{summary['micro_accuracy']:.4f}",
+                    '',
+                    f"{summary['balanced_accuracy']:.4f}",
+                    f"{det_rate:.4f}", results['detection_total'],
+                    results['classification_total']])
+        w.writerow([exp_name, 'MICRO_ACCURACY', '', '', '', '', '', '',
+                    '', '', '', f"{summary['micro_accuracy']:.4f}", '',
+                    '', f"{det_rate:.4f}", results['detection_total'],
+                    results['classification_total']])
+        w.writerow([exp_name, 'MULTICLASS_MCC', '', '', '', '', '', '',
+                    '', '', f"{summary['multiclass_mcc']:.4f}", '', '',
+                    '', f"{det_rate:.4f}", results['detection_total'],
+                    results['classification_total']])
 
     confusion_path = os.path.join(out_dir, f"{exp_name}_confusion_matrix.csv")
     with open(confusion_path, 'w', newline='') as f:
@@ -1161,7 +1304,7 @@ def save_csv(out_dir: str, exp_name: str, results: dict, dyn_vel_thresh: float):
                         correct,
                         f"{recall:.4f}" if not np.isnan(recall) else 'nan'])
 
-        total = results['detection_total']
+        total = results['classification_total']
         correct = sum(results['confusion'][cls][cls] for cls in GT_CLASSES)
         w.writerow([exp_name, 'MULTICLASS_TOTAL', '', '', '', '',
                     total, correct,
@@ -1170,20 +1313,21 @@ def save_csv(out_dir: str, exp_name: str, results: dict, dyn_vel_thresh: float):
     records_path = os.path.join(out_dir, f"{exp_name}_frames.csv")
     with open(records_path, 'w', newline='') as f:
         w = csv.writer(f)
-        w.writerow(['t_detector', 't_relative', 't_gt',
+        w.writerow(['sample_type', 't_detector', 't_relative', 't_gt',
                     'gt_label', 'pred_label', 'gt_speed_m_s', 'match_dist_m',
                     'gt_x_odom', 'gt_y_odom', 'pred_x_odom', 'pred_y_odom',
                     'pred_vx', 'pred_vy', 'track_id', 'track_age'])
         for r in results['records']:
-            w.writerow([f"{r['t']:.6f}",
+            w.writerow([r['sample_type'],
+                        f"{r['t']:.6f}",
                         f"{r['t_rel']:.6f}",
                         f"{r['t_gt']:.6f}",
                         LABEL_MAP.get(r['gt_label'],   str(r['gt_label'])),
                         LABEL_MAP.get(r['pred_label'], str(r['pred_label'])),
-                        f"{r['gt_speed']:.4f}",
+                        f"{r['gt_speed']:.4f}" if not np.isnan(r['gt_speed']) else 'nan',
                         f"{r['match_dist']:.3f}" if not np.isnan(r['match_dist']) else 'nan',
-                        f"{r['gt_x']:.3f}",
-                        f"{r['gt_y']:.3f}",
+                        f"{r['gt_x']:.3f}" if not np.isnan(r['gt_x']) else 'nan',
+                        f"{r['gt_y']:.3f}" if not np.isnan(r['gt_y']) else 'nan',
                         f"{r['pred_x']:.3f}" if not np.isnan(r['pred_x']) else 'nan',
                         f"{r['pred_y']:.3f}" if not np.isnan(r['pred_y']) else 'nan',
                         f"{r['pred_vx']:.3f}" if not np.isnan(r['pred_vx']) else 'nan',
@@ -1235,6 +1379,14 @@ def main():
                         help="Secondi da saltare all'inizio (default: 10)")
     parser.add_argument("--dyn_vel_thresh", type=float, default=0.15,
                         help="Soglia velocità [m/s] per GT=DYNAMIC (default: 0.15)")
+    parser.add_argument("--static_vel_thresh", type=float, default=-1.0,
+                        help=("Soglia velocità [m/s] sotto cui il GT diventa STATIC. "
+                              "Default -1.0: disabilitata, quindi i non-dynamic restano "
+                              "POTENTIALLY_DYNAMIC."))
+    parser.add_argument("--force_no_gt_potentially_dynamic", action="store_true",
+                        help=("Forza a DYNAMIC tutti i frame GT non STATIC che non superano "
+                              "dyn_vel_thresh. Utile per run in cui la persona e' nota "
+                              "come sempre dinamica e i residui POT_DYN sono artefatti."))
     parser.add_argument("--match_dist_thresh", type=float, default=1.0,
                         help="Distanza max XY [m] per associare ostacolo a persona (default: 1.0)")
     parser.add_argument("--t_max_diff",    type=float, default=0.1,
@@ -1419,6 +1571,8 @@ def main():
         t_start_offset    = args.t_start,
         match_dist_thresh = args.match_dist_thresh,
         dyn_vel_thresh    = args.dyn_vel_thresh,
+        static_vel_thresh = args.static_vel_thresh,
+        force_no_gt_potentially_dynamic = args.force_no_gt_potentially_dynamic,
         t_max_diff        = args.t_max_diff,
         time_mode         = args.time_mode,
         gt_time_offset    = effective_gt_time_offset,

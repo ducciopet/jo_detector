@@ -186,6 +186,8 @@ namespace onboardDetector{
 
         // UV detection param 
         double uvBoxMaxDiagonal_;
+        double boxMaxHeight_;
+        double boxMaxVolume_;
 
         // LiDAR Visual Filtering
         double visualboxIOUThresh_;
@@ -215,6 +217,7 @@ namespace onboardDetector{
         double eQVel_v2_;
         double eQAcc_v2_;
         double eRPos_v2_;
+        int predictionVisualizationSteps_;
 
         // (coastingMaxMissedFrames_ removed: predicted bboxes are never put in output)
 
@@ -436,6 +439,7 @@ namespace onboardDetector{
         void getKalmanObservationAccV2(const onboardDetector::box3D& currDetectedBBox, MatrixXd& Z);
         double computeBoxIoU2D(const onboardDetector::box3D& boxA, const onboardDetector::box3D& boxB) const;
         void getPredictedBBoxesFromFilters(std::vector<onboardDetector::box3D>& propedBBoxes, std::vector<Eigen::Vector3d>& propedPcCenters);
+        void populatePredictionVisualizationBBoxes();
         bool isCloseToExistingTrack(const onboardDetector::box3D& currDetectedBBox, const Eigen::Vector3d& currPcCenter, const std::vector<bool>& prevMatched);
         double computeRelativeSizeDiff(const onboardDetector::box3D& a, const onboardDetector::box3D& b) const;
         bool areBoxesDuplicate2D(const onboardDetector::box3D& a, const onboardDetector::box3D& b) const;
@@ -463,7 +467,7 @@ namespace onboardDetector{
         void publishUVImages(); 
         void publishColorImages();
         void publishPoints(const std::vector<Eigen::Vector3d>& points, const rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr& publisher);
-        void publish3dBox(const std::vector<onboardDetector::box3D>& bboxes, const rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr& publisher, double r, double g, double b, double a = 1.0);
+        void publish3dBox(const std::vector<onboardDetector::box3D>& bboxes, const rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr& publisher, double r, double g, double b, double a = 1.0, bool highlightYolo = false, bool useClassificationColors = true, double lifetimeSeconds = -1.0);
         void publishHistoryTraj();
         void publishVelVis();
         void publishLidarClusters();
@@ -471,6 +475,7 @@ namespace onboardDetector{
         void publishRawDynamicPoints();
         void publishDynamicObstacleArray();
         void publishTrackedDynamicObstacleMarkers();
+        void refreshTrackedBBoxClassificationFlags();
 
         // helper function
         void transformBBox(const Eigen::Vector3d& center, const Eigen::Vector3d& size, const Eigen::Vector3d& position, const Eigen::Matrix3d& orientation, Eigen::Vector3d& newCenter, Eigen::Vector3d& newSize);
@@ -494,6 +499,7 @@ namespace onboardDetector{
         onboardDetector::Point eigenToDBPoint(const Eigen::Vector3d& p);
         Eigen::Vector3d dbPointToEigen(const onboardDetector::Point& pDB);
         void eigenToDBPointVec(const std::vector<Eigen::Vector3d>& points, std::vector<onboardDetector::Point>& pointsDB, int size);       
+        bool isOversizedBBox(const onboardDetector::box3D& bbox) const;
     };
 
 

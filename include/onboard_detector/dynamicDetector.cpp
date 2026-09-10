@@ -449,6 +449,22 @@ namespace onboardDetector{
             std::cout << this->hint_ << ": UV box max diagonal is set to: " << this->uvBoxMaxDiagonal_ << std::endl;
         }
 
+        if (!this->nh_->get_parameter(pname("box_max_height"), this->boxMaxHeight_) &&
+            !this->nh_->get_parameter(pname("indoor_box_max_height"), this->boxMaxHeight_)){
+            this->boxMaxHeight_ = 3.0;
+            std::cout << this->hint_ << ": No box_max_height param found. Use default: 3.0 m." << std::endl;
+        } else {
+            std::cout << this->hint_ << ": Box max height is set to: " << this->boxMaxHeight_ << " m." << std::endl;
+        }
+
+        if (!this->nh_->get_parameter(pname("box_max_volume"), this->boxMaxVolume_) &&
+            !this->nh_->get_parameter(pname("indoor_box_max_volume"), this->boxMaxVolume_)){
+            this->boxMaxVolume_ = 3.0;
+            std::cout << this->hint_ << ": No box_max_volume param found. Use default: 3.0 m^3." << std::endl;
+        } else {
+            std::cout << this->hint_ << ": Box max volume is set to: " << this->boxMaxVolume_ << " m^3." << std::endl;
+        }
+
         // Visual IOU threshold
         if (!this->nh_->get_parameter(pname("visual_filtering_BBox_IOU_threshold"), this->visualboxIOUThresh_)){
             this->visualboxIOUThresh_ = 0.5;
@@ -600,6 +616,18 @@ namespace onboardDetector{
         }
         else{
             std::cout << this->hint_ << ": Number of frames used in KF for observation is set to: " << this->kfAvgFrames_ << std::endl;
+        }
+
+        if (!this->nh_->get_parameter(pname("prediction_visualization_steps"), this->predictionVisualizationSteps_)){
+            this->predictionVisualizationSteps_ = 5;
+            std::cout << this->hint_ << ": No prediction_visualization_steps parameter found. Use default: 5." << std::endl;
+        }
+        else if (this->predictionVisualizationSteps_ < 1){
+            std::cout << this->hint_ << ": prediction_visualization_steps must be >= 1. Clamping to 1." << std::endl;
+            this->predictionVisualizationSteps_ = 1;
+        }
+        else{
+            std::cout << this->hint_ << ": Prediction visualization steps: " << this->predictionVisualizationSteps_ << std::endl;
         }
 
         // num of max missed frames for KF matching
@@ -1941,6 +1969,7 @@ namespace onboardDetector{
 
         if (!this->boxHist_.empty() || !this->filteredBBoxes_.empty()){
             this->kalmanFilterAndUpdateHist(bestMatch);
+            this->populatePredictionVisualizationBBoxes();
         }
         else{
             this->boxHist_.clear();
@@ -1949,6 +1978,9 @@ namespace onboardDetector{
             this->filters_.clear();
             this->missedFrames_.clear();
             this->trackedBBoxes_.clear();
+            this->predictedBBoxesActive_.clear();
+            this->predictedBBoxesMissed_.clear();
+            this->predictedBBoxesUnconfirmed_.clear();
         }
 
         // Debug: Print history and filter sizes after tracking
@@ -2252,11 +2284,14 @@ namespace onboardDetector{
         this->publish3dBox(this->visualBBoxes_, this->visualBBoxesPub_, 0.3, 0.8, 1.0);
         this->publish3dBox(this->lidarBBoxes_, this->lidarBBoxesPub_, 0.5, 0.5, 0.5);
         this->publish3dBox(this->filteredBBoxesBeforeYolo_, this->filteredBBoxesBeforeYoloPub_, 0, 1, 0.5);
-        this->publish3dBox(this->filteredBBoxes_, this->filteredBBoxesPub_, 0, 1, 1);
-        this->publish3dBox(this->trackedBBoxes_, this->trackedBBoxesPub_, 1, 1, 0);
-        this->publish3dBox(this->predictedBBoxesActive_,       this->predictedBBoxesActivePub_,       1.0, 0.5, 0.0, 0.5);
-        this->publish3dBox(this->predictedBBoxesMissed_,       this->predictedBBoxesMissedPub_,       1.0, 0.15, 0.15, 0.6);
-        this->publish3dBox(this->predictedBBoxesUnconfirmed_,  this->predictedBBoxesUnconfirmedPub_,  0.6, 0.6, 0.6, 0.35);
+        this->publish3dBox(this->filteredBBoxes_, this->filteredBBoxesPub_, 0, 1, 1, 1.0, true);
+
+        this->refreshTrackedBBoxClassificationFlags();
+        const double trackedMarkerLifetime = std::max(0.25, 2.5 * this->dt_);
+        this->publish3dBox(this->trackedBBoxes_, this->trackedBBoxesPub_, 0.74, 0.56, 0.18, 1.0, false, true, trackedMarkerLifetime);
+        this->publish3dBox(this->predictedBBoxesActive_,       this->predictedBBoxesActivePub_,       0.72, 0.30, 0.05, 0.55, false, false);
+        this->publish3dBox(this->predictedBBoxesMissed_,       this->predictedBBoxesMissedPub_,       1.0, 0.15, 0.15, 0.6, false, false);
+        this->publish3dBox(this->predictedBBoxesUnconfirmed_,  this->predictedBBoxesUnconfirmedPub_,  0.6, 0.6, 0.6, 0.35, false, false);
         // Publish track IDs as text markers above each tracked bbox
         visualization_msgs::msg::MarkerArray trackIdMarkers;
         for (size_t i = 0; i < this->trackedBBoxes_.size(); ++i) {
@@ -2301,7 +2336,7 @@ namespace onboardDetector{
                           + " | age: " + std::to_string(this->trackedBBoxes_[i].track_age)
                           + " | |V|: " + std::to_string(vnorm).substr(0, 4)
                           + " | " + statusStr;
-            idMarker.lifetime = rclcpp::Duration::from_seconds(0.1);
+            idMarker.lifetime = rclcpp::Duration::from_seconds(trackedMarkerLifetime);
             trackIdMarkers.markers.push_back(idMarker);
         }
         this->trackedBBoxesPub_->publish(trackIdMarkers);
@@ -2323,6 +2358,8 @@ namespace onboardDetector{
     }
 
     void dynamicDetector::publishDynamicObstacleArray(){
+        this->refreshTrackedBBoxClassificationFlags();
+
         jo_msgs::msg::ObstacleArray arr;
         arr.header.frame_id = "odom";
         arr.header.stamp = this->nh_->now();
@@ -2382,6 +2419,37 @@ namespace onboardDetector{
         this->publish3dBox(obstacleBoxes, this->trackedObstaclesBBoxesPub_, 0.85, 0.55, 0.18);
     }
 
+    void dynamicDetector::refreshTrackedBBoxClassificationFlags(){
+        std::unordered_set<int> dynamicTrackIds;
+        std::unordered_set<int> potentiallyDynamicTrackIds;
+
+        for (const auto& box : this->dynamicBBoxes_){
+            dynamicTrackIds.insert(static_cast<int>(box.id));
+        }
+        for (const auto& box : this->potentiallyDynamicBBoxes_){
+            potentiallyDynamicTrackIds.insert(static_cast<int>(box.id));
+        }
+        for (const auto& hist : this->boxHist_){
+            if (hist.empty()) continue;
+            const auto& box = hist.front();
+            const int trackId = static_cast<int>(box.id);
+            if (box.is_dynamic){
+                dynamicTrackIds.insert(trackId);
+            }
+            if (box.is_potentially_dynamic){
+                potentiallyDynamicTrackIds.insert(trackId);
+            }
+        }
+
+        for (auto& box : this->trackedBBoxes_){
+            const int trackId = static_cast<int>(box.id);
+            box.is_dynamic = dynamicTrackIds.find(trackId) != dynamicTrackIds.end();
+            box.is_potentially_dynamic =
+                !box.is_dynamic &&
+                potentiallyDynamicTrackIds.find(trackId) != potentiallyDynamicTrackIds.end();
+        }
+    }
+
     void dynamicDetector::uvDetect(){
         // initialization
         if (this->uvDetector_ == NULL){
@@ -2413,17 +2481,25 @@ namespace onboardDetector{
             // std::cout << "[DEBUG] After transformUVBBoxes, uvBBoxes size = " << uvBBoxes.size() << std::endl;
             this->uvBBoxes_ = uvBBoxes;
 
-            // Filter UV bboxes by XY diagonal — must happen here, after uvBBoxes_ is assigned,
+            // Filter UV bboxes — must happen here, after uvBBoxes_ is assigned,
             // NOT in dbscanDetect() where it ran on the previous frame's data.
             std::vector<onboardDetector::box3D> filteredUVBBoxes;
             for (const auto& box : this->uvBBoxes_) {
-                const double diag = std::sqrt(box.x_width * box.x_width + box.y_width * box.y_width);
-                if (diag <= this->uvBoxMaxDiagonal_) {
+                if (!this->isOversizedBBox(box)) {
                     filteredUVBBoxes.push_back(box);
                 }
             }
             this->uvBBoxes_ = filteredUVBBoxes;
         }
+    }
+
+    bool dynamicDetector::isOversizedBBox(const onboardDetector::box3D& bbox) const {
+        const double xyDiag = std::sqrt(bbox.x_width * bbox.x_width +
+                                        bbox.y_width * bbox.y_width);
+        const double volume = bbox.x_width * bbox.y_width * bbox.z_width;
+        return xyDiag > this->uvBoxMaxDiagonal_ ||
+               bbox.z_width > this->boxMaxHeight_ ||
+               volume > this->boxMaxVolume_;
     }
 
     void dynamicDetector::dbscanDetect(){
@@ -2439,6 +2515,32 @@ namespace onboardDetector{
         // RCLCPP_INFO(this->nh_->get_logger(), "[DEBUG] Clustering filteredDepthPoints_ (size: %zu)", this->filteredDepthPoints_.size());
         this->clusterPointsAndBBoxes(this->filteredDepthPoints_, this->dbBBoxes_, this->pcClustersVisual_,
                                      this->pcClusterCentersVisual_, this->pcClusterStdsVisual_);
+
+        {
+            std::vector<onboardDetector::box3D> keptBBoxes;
+            std::vector<std::vector<Eigen::Vector3d>> keptClusters;
+            std::vector<Eigen::Vector3d> keptCenters;
+            std::vector<Eigen::Vector3d> keptStds;
+            keptBBoxes.reserve(this->dbBBoxes_.size());
+            keptClusters.reserve(this->pcClustersVisual_.size());
+            keptCenters.reserve(this->pcClusterCentersVisual_.size());
+            keptStds.reserve(this->pcClusterStdsVisual_.size());
+
+            for (size_t i = 0; i < this->dbBBoxes_.size(); ++i) {
+                if (this->isOversizedBBox(this->dbBBoxes_[i])) {
+                    continue;
+                }
+                keptBBoxes.push_back(this->dbBBoxes_[i]);
+                if (i < this->pcClustersVisual_.size()) keptClusters.push_back(this->pcClustersVisual_[i]);
+                if (i < this->pcClusterCentersVisual_.size()) keptCenters.push_back(this->pcClusterCentersVisual_[i]);
+                if (i < this->pcClusterStdsVisual_.size()) keptStds.push_back(this->pcClusterStdsVisual_[i]);
+            }
+
+            this->dbBBoxes_ = std::move(keptBBoxes);
+            this->pcClustersVisual_ = std::move(keptClusters);
+            this->pcClusterCentersVisual_ = std::move(keptCenters);
+            this->pcClusterStdsVisual_ = std::move(keptStds);
+        }
     }
 
 
@@ -2476,7 +2578,8 @@ namespace onboardDetector{
 
                 if (lidarBBox.x_width > this->maxObjectSize_(0) ||
                     lidarBBox.y_width > this->maxObjectSize_(1) ||
-                    lidarBBox.z_width > this->maxObjectSize_(2)){
+                    lidarBBox.z_width > this->maxObjectSize_(2) ||
+                    this->isOversizedBBox(lidarBBox)){
                     continue;
                 }
 
@@ -3325,6 +3428,37 @@ namespace onboardDetector{
         std::vector<Eigen::Vector3d> lidarPcClusterCentersTemp;
         std::vector<Eigen::Vector3d> lidarPcClusterStdsTemp; // store lidar output
 
+        auto removeOversizedBoxes = [this](
+            std::vector<onboardDetector::box3D>& boxes,
+            std::vector<std::vector<Eigen::Vector3d>>& clusters,
+            std::vector<Eigen::Vector3d>& centers,
+            std::vector<Eigen::Vector3d>& stds)
+        {
+            std::vector<onboardDetector::box3D> keptBoxes;
+            std::vector<std::vector<Eigen::Vector3d>> keptClusters;
+            std::vector<Eigen::Vector3d> keptCenters;
+            std::vector<Eigen::Vector3d> keptStds;
+            keptBoxes.reserve(boxes.size());
+            keptClusters.reserve(clusters.size());
+            keptCenters.reserve(centers.size());
+            keptStds.reserve(stds.size());
+
+            for (size_t i = 0; i < boxes.size(); ++i) {
+                if (this->isOversizedBBox(boxes[i])) {
+                    continue;
+                }
+                keptBoxes.push_back(boxes[i]);
+                if (i < clusters.size()) keptClusters.push_back(clusters[i]);
+                if (i < centers.size()) keptCenters.push_back(centers[i]);
+                if (i < stds.size()) keptStds.push_back(stds[i]);
+            }
+
+            boxes = std::move(keptBoxes);
+            clusters = std::move(keptClusters);
+            centers = std::move(keptCenters);
+            stds = std::move(keptStds);
+        };
+
         // =========================
         // STEP 0: MERGE NESTED UV + DB (INTRA-GROUP)
         // =========================
@@ -3398,6 +3532,14 @@ namespace onboardDetector{
         );
         // std::cout << "[DEBUG] filterLVBBoxes: after DBSCAN mergeNestedGroup, dbBBoxesFiltered size = " << dbBBoxesFiltered.size() << std::endl;
 
+        removeOversizedBoxes(uvBBoxesFiltered,
+                               uvPcClustersFiltered,
+                               uvPcClusterCentersFiltered,
+                               uvPcClusterStdsFiltered);
+        removeOversizedBoxes(dbBBoxesFiltered,
+                               dbPcClustersFiltered,
+                               dbPcClusterCentersFiltered,
+                               dbPcClusterStdsFiltered);
         this->publish3dBox(uvBBoxesFiltered, this->uvBBoxesFilteredPub_, 0, 1, 0.5);
         this->publish3dBox(dbBBoxesFiltered, this->dbBBoxesFilteredPub_, 1, 0.5, 0);
 
@@ -3426,6 +3568,10 @@ namespace onboardDetector{
             this->visualboxIOUThresh_, 
             this->visualboxIOVThresh_);
         
+        removeOversizedBoxes(visualBBoxesTemp,
+                               visualPcClustersTemp,
+                               visualPcClusterCentersTemp,
+                               visualPcClusterStdsTemp);
         this->visualBBoxes_ = visualBBoxesTemp;
 
         // STEP 2: Get lidar bboxes and its corresponding clusters and features
@@ -3473,6 +3619,10 @@ namespace onboardDetector{
             lidarPcClusterStdsFiltered
         );
 
+        removeOversizedBoxes(lidarBBoxesFiltered,
+                               lidarPcClustersFiltered,
+                               lidarPcClusterCentersFiltered,
+                               lidarPcClusterStdsFiltered);
         this->publish3dBox(lidarBBoxesFiltered, this->lidarBBoxesFilteredPub_, 1, 0, 0.5);
         
         // STEP 3: Fuse LiDAR and visual bounding boxes
@@ -3533,6 +3683,11 @@ namespace onboardDetector{
             filteredPcClusterCentersTemp = finalMergedCenters;
             filteredPcClusterStdsTemp  = finalMergedStds;
         }
+
+        removeOversizedBoxes(filteredBBoxesTemp,
+                               filteredPcClustersTemp,
+                               filteredPcClusterCentersTemp,
+                               filteredPcClusterStdsTemp);
 
         this->filteredBBoxesBeforeYolo_ = filteredBBoxesTemp; // ready for visualization / next steps
 
@@ -3897,6 +4052,13 @@ namespace onboardDetector{
         // The is_yolo_candidate flag is now sticky in boxHist_ (via kalmanFilterAndUpdateHist),
         // so the track survives without needing the raw YOLO result again.
         this->yoloDetectionResults_.detections.clear();
+
+        // Re-apply indoor size filter: YOLO may have expanded box dimensions after the
+        // first removeOversizedBoxes pass (x/y resize and height correction).
+        removeOversizedBoxes(filteredBBoxesTemp,
+                               filteredPcClustersTemp,
+                               filteredPcClusterCentersTemp,
+                               filteredPcClusterStdsTemp);
 
         this->filteredBBoxes_ = filteredBBoxesTemp;
         this->filteredPcClusters_ = filteredPcClustersTemp;
@@ -4994,22 +5156,6 @@ namespace onboardDetector{
 
         this->getPredictedBBoxesFromFilters(predictedBBoxes, predictedPcCenters);
 
-        this->predictedBBoxesActive_.clear();
-        this->predictedBBoxesMissed_.clear();
-        this->predictedBBoxesUnconfirmed_.clear();
-        {
-            size_t predIdx = 0;
-            for (size_t i = 0; i < this->boxHist_.size(); ++i) {
-                if (this->boxHist_[i].empty()) continue;
-                const onboardDetector::box3D& pred = predictedBBoxes[predIdx++];
-                const bool confirmed = (i < this->confirmedTracks_.size()) && this->confirmedTracks_[i];
-                const int  missed    = (i < this->missedFrames_.size())    ? this->missedFrames_[i] : 0;
-                if (!confirmed)      this->predictedBBoxesUnconfirmed_.push_back(pred);
-                else if (missed > 0) this->predictedBBoxesMissed_.push_back(pred);
-                else                 this->predictedBBoxesActive_.push_back(pred);
-            }
-        }
-
         this->getPreviousObservedBBoxes(previousObservedBBoxes);
 
         this->findBestMatch(predictedBBoxes, previousObservedBBoxes, bestMatch);
@@ -5678,6 +5824,46 @@ namespace onboardDetector{
             propedPcCenters.push_back(predPcCenter);
         }
     }
+
+    void dynamicDetector::populatePredictionVisualizationBBoxes(){
+        this->predictedBBoxesActive_.clear();
+        this->predictedBBoxesMissed_.clear();
+        this->predictedBBoxesUnconfirmed_.clear();
+
+        const int numSteps = this->predictionVisualizationSteps_ < 1 ? 1 : this->predictionVisualizationSteps_;
+
+        for (size_t i = 0; i < this->boxHist_.size(); ++i){
+            if (this->boxHist_[i].empty() || i >= this->filters_.size()){
+                continue;
+            }
+
+            const bool confirmed = (i < this->confirmedTracks_.size()) && this->confirmedTracks_[i];
+            const int missed = (i < this->missedFrames_.size()) ? this->missedFrames_[i] : 0;
+
+            onboardDetector::kalman_filter predictedFilter = this->filters_[i];
+            for (int step = 0; step < numSteps; ++step){
+                predictedFilter.predict(MatrixXd::Zero(6,1));
+
+                onboardDetector::box3D predBBox = this->boxHist_[i][0];
+                predBBox.x = predictedFilter.output(0);
+                predBBox.y = predictedFilter.output(1);
+                predBBox.Vx = predictedFilter.output(2);
+                predBBox.Vy = predictedFilter.output(3);
+                predBBox.Ax = predictedFilter.output(4);
+                predBBox.Ay = predictedFilter.output(5);
+
+                if (!confirmed){
+                    this->predictedBBoxesUnconfirmed_.push_back(predBBox);
+                }
+                else if (missed > 0){
+                    this->predictedBBoxesMissed_.push_back(predBBox);
+                }
+                else{
+                    this->predictedBBoxesActive_.push_back(predBBox);
+                }
+            }
+        }
+    }
     
     bool dynamicDetector::isCloseToExistingTrack(const onboardDetector::box3D& currDetectedBBox,
                                                 const Eigen::Vector3d& currPcCenter,
@@ -6152,7 +6338,7 @@ namespace onboardDetector{
 
     void dynamicDetector::publish3dBox(const std::vector<box3D>& boxes,
                                 const rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr& publisher,
-                                double r, double g, double b, double a){
+                                double r, double g, double b, double a, bool highlightYolo, bool useClassificationColors, double lifetimeSeconds){
         visualization_msgs::msg::MarkerArray markers;
 
         for (size_t i = 0; i < boxes.size(); i++)
@@ -6164,11 +6350,15 @@ namespace onboardDetector{
             line.type = visualization_msgs::msg::Marker::LINE_LIST;
             line.action = visualization_msgs::msg::Marker::ADD;
             line.scale.x = 0.06;
-            if (boxes[i].is_dynamic){
+            if (highlightYolo && boxes[i].is_yolo_candidate){
+                line.color.r = 0.45;
+                line.color.g = 0.35;
+                line.color.b = 0.75;
+            } else if (useClassificationColors && boxes[i].is_dynamic){
                 line.color.r = 0.0;
                 line.color.g = 0.0;
                 line.color.b = 1.0;
-            } else if (boxes[i].is_potentially_dynamic){
+            } else if (useClassificationColors && boxes[i].is_potentially_dynamic){
                 line.color.r = 0.0;
                 line.color.g = 1.0;
                 line.color.b = 0.0;
@@ -6178,7 +6368,7 @@ namespace onboardDetector{
                 line.color.b = b;
             }
             line.color.a = a;
-            line.lifetime = rclcpp::Duration::from_seconds(this->dt_);
+            line.lifetime = rclcpp::Duration::from_seconds(lifetimeSeconds > 0.0 ? lifetimeSeconds : this->dt_);
             line.pose.orientation.x = 0.0;
             line.pose.orientation.y = 0.0;
             line.pose.orientation.z = 0.0;

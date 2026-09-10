@@ -32,7 +32,7 @@ wall_detector_node:
       # Ground / Roof estimation
       ground_height: -0.3                # [m] initial ground height (overwritten by RANSAC estimation)
       ground_roof_offset: 5.0            # [m] roof = ground + offset
-      ground_conservative_offset: 0.10   # [m] margin added above RANSAC bestZ before updating ground_height
+      ground_conservative_offset: 0.20  # [m] margin added above RANSAC bestZ before updating ground_height
       ground_ema_alpha: 0.05             # EMA smoothing factor for ground height updates (lower = slower response)
 
       # -----------------------------------------------------------------------
@@ -125,9 +125,11 @@ detector_node:
       voxel_occupied_thresh: 5.0 # min raw points in a voxel to keep it (noise rejection threshold) — must be float (double in code)
 
       # -----------------------------------------------------------------------
-      # UV Detection Filtering
+      # Detections Filtering
       # -----------------------------------------------------------------------
       uv_box_max_diagonal: 5.0  # [m] max XY diagonal of a UV-map bbox; larger detections are discarded as spurious (5.0 for cars)
+      box_max_height: 3.0        # [m] bboxes taller than this are discarded as spurious
+      box_max_volume: 16.0        # [m^3] bboxes larger than this volume are discarded as spurious
 
       # -----------------------------------------------------------------------
       # Visual DBSCAN Parameters (depth point cloud)
