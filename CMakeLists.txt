@@ -34,34 +34,18 @@ find_package(vision_msgs REQUIRED)
 unset(FLANN_ROOT)
 find_package(PCL REQUIRED)
 
-set(CMAKE_WARN_DEPRECATED FALSE)
-find_package(Open3D REQUIRED)
-set(CMAKE_WARN_DEPRECATED TRUE)
 find_package(pcl_conversions REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(jo_msgs REQUIRED)
 
-# Open3D from /usr/local may export hardcoded LLVM libc++ paths that are not
-# present on this image (e.g. /usr/lib/llvm-18/lib/libc++.so.1). Rewrite them
-# to system locations when available.
-if(TARGET Open3D::Open3D)
-  get_target_property(_o3d_link_libs Open3D::Open3D INTERFACE_LINK_LIBRARIES)
-  if(_o3d_link_libs)
-    set(_o3d_link_libs_fixed "${_o3d_link_libs}")
-
-    if(NOT EXISTS "/usr/lib/llvm-18/lib/libc++.so.1" AND EXISTS "/usr/lib/x86_64-linux-gnu/libc++.so.1")
-      string(REPLACE "/usr/lib/llvm-18/lib/libc++.so.1" "/usr/lib/x86_64-linux-gnu/libc++.so.1" _o3d_link_libs_fixed "${_o3d_link_libs_fixed}")
-    endif()
-
-    if(NOT EXISTS "/usr/lib/llvm-18/lib/libc++abi.so" AND EXISTS "/usr/lib/x86_64-linux-gnu/libc++abi.so.1")
-      string(REPLACE "/usr/lib/llvm-18/lib/libc++abi.so" "/usr/lib/x86_64-linux-gnu/libc++abi.so.1" _o3d_link_libs_fixed "${_o3d_link_libs_fixed}")
-    endif()
-
-    set_target_properties(Open3D::Open3D PROPERTIES INTERFACE_LINK_LIBRARIES "${_o3d_link_libs_fixed}")
-  endif()
-endif()
+# gtsam / gtsam_points: used by calibration_icp_node for GICP-based
+# depth<->lidar registration (same registration stack already required by
+# the glim submodule, see glim/CMakeLists.txt), replacing the former Open3D
+# dependency.
+find_package(GTSAM 4.2 REQUIRED)
+find_package(gtsam_points 1.2.0 REQUIRED)
 
 # For services
 find_package(rosidl_default_generators REQUIRED)
@@ -151,6 +135,7 @@ ament_target_dependencies(calibration_node
   sensor_msgs
   cv_bridge
   message_filters
+  image_transport
   pcl_conversions
   tf2
   tf2_geometry_msgs
@@ -169,6 +154,7 @@ ament_target_dependencies(calibration_icp_node
   sensor_msgs
   cv_bridge
   message_filters
+  image_transport
   pcl_conversions
   tf2
   tf2_geometry_msgs
@@ -176,7 +162,8 @@ ament_target_dependencies(calibration_icp_node
 
 target_link_libraries(calibration_icp_node
   ${PCL_LIBRARIES}
-  Open3D::Open3D
+  gtsam
+  gtsam_points::gtsam_points
 )
 
 # Wall detector node executable (standalone, under scripts/wall_detector/)
@@ -196,11 +183,23 @@ ament_target_dependencies(wall_detector_node
   visualization_msgs
   pcl_conversions
   cv_bridge
+  image_transport
   tf2
   tf2_ros
   tf2_geometry_msgs
 )
 
+
+# Image restamp node (generic image_transport decode + header.stamp fix —
+# see scripts/image_restamper/image_restamp_node.cpp for why this exists)
+add_executable(image_restamp_node
+  scripts/image_restamper/image_restamp_node.cpp
+)
+ament_target_dependencies(image_restamp_node
+  rclcpp
+  sensor_msgs
+  image_transport
+)
 
 # Odometry TF publisher node
 add_executable(odometry_tf_publisher_node src/odometry_tf_publisher.cpp)
@@ -220,6 +219,7 @@ install(TARGETS
   calibration_node
   calibration_icp_node
   wall_detector_node
+  image_restamp_node
   odometry_tf_publisher_node
   DESTINATION lib/${PROJECT_NAME}
 )

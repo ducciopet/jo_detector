@@ -341,15 +341,19 @@ calibration_icp_node:
     icp_max_correspondence_distance: 0.35  # [m] max point-to-point distance considered an ICP correspondence
     icp_max_iteration: 100                 # max ICP iterations per run
     icp_voxel_size: 0.08                   # [m] voxel down-sampling before ICP (larger = smoother, better for sparse outdoor clouds)
-    icp_use_point_to_plane: true           # true = point-to-plane ICP (requires normals); false = point-to-point
-    icp_normal_radius: 0.25                # [m] search radius for normal estimation (larger for sparser outdoor clouds)
-    icp_normal_max_nn: 50                  # max neighbours used for normal estimation
+    icp_use_point_to_plane: true           # true = GICP (per-point covariances); false = point-to-point ICP
+    icp_normal_radius: 0.25                # [m] unused by the gtsam_points/GICP backend, kept for reference
+    icp_normal_max_nn: 50                  # unused by the gtsam_points/GICP backend, kept for reference
+    icp_num_threads: 4                     # threads used by the GICP/ICP correspondence search
     min_overlap_points: 50                 # min LiDAR points in camera FOV; if fewer, full cloud is used as target
     overlap_fov_margin_px: 120             # [px] margin added around image boundary when computing FOV overlap
     icp_max_runs: 3                        # number of independent ICP scenes to collect before averaging
     icp_fitness_threshold: 0.15            # min ICP fitness score to accept a result (0-1, higher = better fit)
     icp_timeout_sec: 7.0                  # [s] outdoor fallback: average valid results (or initial guess if none) after this delay
     is_indoor: false                       # outdoor: fall back after icp_timeout_sec if ICP not done
+    recalibration_period_sec: 0.0          # 0 = one-shot calibration only (default). >0 = after the initial
+                                            # one-shot calibration, re-run registration every N seconds and
+                                            # replace camera_refined only when the new result is VALID.
     onboard_detector:
       depth_intrinsics: [436.9647521972656, 436.9647521972656, 431.9205627441406, 240.13380432128906] # [fx, fy, cx, cy]
       depth_scale_factor: 1000.0           # raw_value / scale = meters

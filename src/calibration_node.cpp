@@ -4,6 +4,8 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
+#include <image_transport/image_transport.hpp>
+#include <image_transport/subscriber_filter.hpp>
 #include <cv_bridge/cv_bridge.hpp>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -65,9 +67,12 @@ public:
         pub_depth_transformed_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
             "/calibration/depth_cloud_in_velodyne", 10);
 
-        // Subscribers with synchronization (only velodyne and depth image)
+        // Subscribers with synchronization (only velodyne and depth image).
+        // "compressedDepth" transport: compressed_depth_image_transport
+        // decompresses transparently on receipt, so onData() below still
+        // gets a normal, uncompressed sensor_msgs::msg::Image.
         sub_velodyne_.subscribe(this, velodyne_topic);
-        sub_depth_.subscribe(this, depth_topic);
+        sub_depth_.subscribe(this, depth_topic, "compressedDepth", rmw_qos_profile_sensor_data);
 
         // Synchronizer (ApproximateTime with larger queue for bag playback)
         typedef message_filters::sync_policies::ApproximateTime<
@@ -88,7 +93,7 @@ private:
 
     // Subscribers (only velodyne and depth)
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> sub_velodyne_;
-    message_filters::Subscriber<sensor_msgs::msg::Image> sub_depth_;
+    image_transport::SubscriberFilter sub_depth_;
 
     // Synchronizer
     std::shared_ptr<message_filters::Synchronizer<

@@ -7,7 +7,7 @@ import torch
 import os
 import time
 from std_msgs.msg import Float64
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CompressedImage
 from vision_msgs.msg import Detection2DArray
 from vision_msgs.msg import Detection2D
 from cv_bridge import CvBridge
@@ -87,9 +87,15 @@ class yolo_detector(Node):
             f"weights={self.weights_path}, score_threshold={self.score_threshold:.2f}"
         )
 
-        # subscriber
+        # subscriber. rclpy/image_transport has no C++-style transport-hint
+        # helper, so we subscribe directly to the image_transport-mangled
+        # "<base_topic>/compressed" topic (published automatically by any
+        # image_transport::Publisher-based driver, e.g. realsense2_camera,
+        # as long as compressed_image_transport is installed — see
+        # docker/Dockerfile).
         self.br = CvBridge()
-        self.img_sub = self.create_subscription(Image, self.image_topic, self.image_callback, self.queue_size)
+        self.img_sub = self.create_subscription(
+            CompressedImage, self.image_topic + '/compressed', self.image_callback, self.queue_size)
 
         # publisher
         self.img_pub = self.create_publisher(Image, self.detected_image_topic, self.queue_size)
@@ -103,32 +109,28 @@ class yolo_detector(Node):
     
     def image_callback(self, msg):
         try:
-            # Direct conversion from raw message data - most reliable for Jazzy
-            # frombuffer creates a read-only view, so we must copy
-            img_array = np.frombuffer(msg.data, dtype=np.uint8)
-            # Make a writable copy
-            img_array = np.array(img_array, copy=True, dtype=np.uint8)
-            # Reshape
-            self.img = img_array.reshape((msg.height, msg.width, 3))
-            
-            # Handle color conversion if needed
-            if msg.encoding == "rgb8":
-                # Convert RGB to BGR in-place by manual channel swap (faster than cv2.cvtColor)
-                self.img = self.img[:, :, ::-1].copy()
-            
-            # Ensure contiguous and correct type
-            self.img = np.ascontiguousarray(self.img, dtype=np.uint8)
-            
+            # JPEG/PNG-decode the compressed payload. cv2.imdecode returns
+            # BGR, which matches what the old raw-Image path produced after
+            # its manual rgb8->BGR swap, so everything downstream (inference,
+            # vis_callback's "bgr8" republish) is unaffected.
+            compressed = np.frombuffer(msg.data, dtype=np.uint8)
+            decoded = cv2.imdecode(compressed, cv2.IMREAD_COLOR)
+            if decoded is None:
+                raise ValueError(f"cv2.imdecode failed (format='{msg.format}', {len(msg.data)} bytes)")
+
+            self.img = np.ascontiguousarray(decoded, dtype=np.uint8)
+
             # Validation
             assert isinstance(self.img, np.ndarray), f"Not numpy array: {type(self.img)}"
             assert self.img.dtype == np.uint8, f"Wrong dtype: {self.img.dtype}"
             assert self.img.flags['WRITEABLE'], "Array is not writable"
-            
+
             self.img_received = True
             if not hasattr(self, '_first_image_logged'):
-                self.get_logger().info(f"First image received on {self.image_topic} ({msg.width}x{msg.height}, {msg.encoding})")
+                h, w = self.img.shape[:2]
+                self.get_logger().info(f"First image received on {self.img_sub.topic_name} ({w}x{h}, format={msg.format})")
                 self._first_image_logged = True
-            
+
         except Exception as e:
             self.get_logger().error(f"Image callback error: {type(e).__name__}: {e}")
             self.img_received = False

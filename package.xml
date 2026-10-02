@@ -29,7 +29,20 @@
 
   <!-- PCL -->
   <depend>pcl_ros</depend>
-  <depend>libopen3d-dev</depend>
+
+  <!-- compressed/compressedDepth image_transport plugins: not linked
+       against directly (image_transport loads them via pluginlib at
+       runtime), but required for the "compressed"/"compressedDepth"
+       transport hints used throughout this package to actually resolve.
+       Already installed via image-transport-plugins in docker/Dockerfile. -->
+  <exec_depend>compressed_image_transport</exec_depend>
+  <exec_depend>compressed_depth_image_transport</exec_depend>
+
+  <!-- GICP-based depth<->lidar registration for calibration_icp_node.
+       Provided by the same gtsam/gtsam_points install the glim submodule
+       requires (see docker/Dockerfile); no rosdep key here, matching
+       glim/package.xml which also resolves it outside rosdep. -->
+  <depend>eigen</depend>
 
   <!-- Service generation -->
   <build_depend>rosidl_default_generators</build_depend>

@@ -7,7 +7,7 @@ import torch
 import os
 import time
 from std_msgs.msg import Float64
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CompressedImage
 from vision_msgs.msg import Detection2DArray
 from vision_msgs.msg import Detection2D
 from cv_bridge import CvBridge
@@ -65,9 +65,14 @@ class yolo_detector(Node):
         self.model.load_state_dict(torch.load(self.weights_path, map_location=device))
         self.model.eval()
 
-        # subscriber
+        # subscriber. rclpy has no image_transport transport-hint helper, so
+        # subscribe directly to the mangled "<base_topic>/compressed" topic
+        # (published automatically by any image_transport::Publisher-based
+        # driver, as long as compressed_image_transport is installed — see
+        # docker/Dockerfile).
         self.br = CvBridge()
-        self.img_sub = self.create_subscription(Image, self.image_topic, self.image_callback, self.queue_size)
+        self.img_sub = self.create_subscription(
+            CompressedImage, self.image_topic + '/compressed', self.image_callback, self.queue_size)
 
         # publisher
         self.img_pub = self.create_publisher(Image, self.detected_image_topic, self.queue_size)
@@ -80,7 +85,7 @@ class yolo_detector(Node):
         self.create_timer(self.timer_period_sec, self.bbox_callback)
     
     def image_callback(self, msg):
-        self.img = self.br.imgmsg_to_cv2(msg, "bgr8")
+        self.img = self.br.compressed_imgmsg_to_cv2(msg, "bgr8")
         self.img_received = True
 
     def detect_callback(self):

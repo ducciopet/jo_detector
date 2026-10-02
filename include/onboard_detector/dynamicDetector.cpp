@@ -1383,6 +1383,12 @@ namespace onboardDetector{
         // downsample points visualization pub
         this->downSamplePointsPub_ = this->nh_->create_publisher<sensor_msgs::msg::PointCloud2>(this->ns_.empty() ? "/downsampled_point_cloud" : this->ns_ + "/downsampled_point_cloud", 10);
 
+        // stable public-API republish of the same cloud, for other packages
+        // (jo_navigation costmap, wall_detector, ...) to consume instead of
+        // re-filtering raw /velodyne_points themselves. See processedLidarPub_
+        // declaration in dynamicDetector.h.
+        this->processedLidarPub_ = this->nh_->create_publisher<sensor_msgs::msg::PointCloud2>(this->ns_.empty() ? "/onboard_detector/lidar/processed" : this->ns_ + "/onboard_detector/lidar/processed", 10);
+
         // raw LiDAR points visualization pub
         this->rawLidarPointsPub_ = this->nh_->create_publisher<sensor_msgs::msg::PointCloud2>(this->ns_.empty() ? "/raw_lidar_point_cloud" : this->ns_ + "/raw_lidar_point_cloud", 10);
 
@@ -1400,8 +1406,12 @@ namespace onboardDetector{
     }   
 
     void dynamicDetector::registerCallback(){
-        // depth pose callback
-        this->depthSub_.reset(new message_filters::Subscriber<sensor_msgs::msg::Image>(this->nh_, this->depthTopicName_));
+        // depth pose callback. "compressedDepth" transport: the
+        // compressed_depth_image_transport plugin decompresses transparently
+        // on receipt, so depthPoseCB/depthOdomCB below still get a normal,
+        // uncompressed sensor_msgs::msg::Image — nothing else changes.
+        this->depthSub_ = std::make_shared<image_transport::SubscriberFilter>();
+        this->depthSub_->subscribe(this->nh_.get(), this->depthTopicName_, "compressedDepth", rmw_qos_profile_sensor_data);
         this->lidarCloudSub_.reset(new message_filters::Subscriber<sensor_msgs::msg::PointCloud2>(this->nh_, this->lidarTopicName_));
         if (this->localizationMode_ == 0){
             this->poseSub_.reset(new message_filters::Subscriber<geometry_msgs::msg::PoseStamped>(this->nh_, this->poseTopicName_));
@@ -1428,10 +1438,14 @@ namespace onboardDetector{
             exit(0);
         }
 
-        // color image subscriber
-        this->colorImgSub_ = this->nh_->create_subscription<sensor_msgs::msg::Image>(
-            this->colorImgTopicName_, 10,
-            std::bind(&dynamicDetector::colorImgCB, this, std::placeholders::_1));
+        // color image subscriber. "compressed" transport: the
+        // compressed_image_transport plugin decompresses (JPEG/PNG)
+        // transparently on receipt, so colorImgCB below still gets a normal,
+        // uncompressed sensor_msgs::msg::Image.
+        this->colorImgSub_ = image_transport::create_subscription(
+            this->nh_.get(), this->colorImgTopicName_,
+            std::bind(&dynamicDetector::colorImgCB, this, std::placeholders::_1),
+            "compressed", rmw_qos_profile_sensor_data);
 
         // yolo detection results subscriber
         this->yoloDetectionSub_ = this->nh_->create_subscription<vision_msgs::msg::Detection2DArray>(
@@ -1692,6 +1706,7 @@ namespace onboardDetector{
         pcl::toROSMsg(*this->lidarCloud_, outputCloud); // Convert to ROS message
         outputCloud.header.frame_id = "odom";    // Set appropriate frame ID
         this->downSamplePointsPub_->publish(outputCloud);
+        this->processedLidarPub_->publish(outputCloud);
 
         // store current position and orientation
         Eigen::Matrix4d lidarPoseMatrix;
@@ -1817,6 +1832,7 @@ namespace onboardDetector{
         pcl::toROSMsg(*this->lidarCloud_, outputCloud); // Convert to ROS message
         outputCloud.header.frame_id = "odom";    // Set appropriate frame ID
         this->downSamplePointsPub_->publish(outputCloud);
+        this->processedLidarPub_->publish(outputCloud);
         
         // store current position and orientation
         Eigen::Matrix4d lidarPoseMatrix;

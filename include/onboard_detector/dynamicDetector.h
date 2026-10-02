@@ -24,6 +24,8 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
+#include <image_transport/image_transport.hpp>
+#include <image_transport/subscriber_filter.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2/exceptions.h>
@@ -53,7 +55,7 @@ namespace onboardDetector{
         rclcpp::Node::SharedPtr nh_;
         std::shared_ptr<tf2_ros::Buffer> tfBuffer_;
         std::shared_ptr<tf2_ros::TransformListener> tfListener_;
-        std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image>> depthSub_;
+        std::shared_ptr<image_transport::SubscriberFilter> depthSub_;
         std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::PointCloud2>> lidarCloudSub_;
         std::shared_ptr<message_filters::Subscriber<geometry_msgs::msg::PoseStamped>> poseSub_;
         typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::Image, geometry_msgs::msg::PoseStamped> depthPoseSync;
@@ -65,7 +67,7 @@ namespace onboardDetector{
         std::shared_ptr<message_filters::Synchronizer<depthOdomSync>> depthOdomSync_;
         typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, nav_msgs::msg::Odometry> lidarOdomSync;
         std::shared_ptr<message_filters::Synchronizer<lidarOdomSync>> lidarOdomSync_;
-        rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr colorImgSub_;
+        image_transport::Subscriber colorImgSub_;
         rclcpp::Subscription<vision_msgs::msg::Detection2DArray>::SharedPtr yoloDetectionSub_;
         rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr groundHeightSub_;
         rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr wallMarkersSub_;
@@ -103,6 +105,12 @@ namespace onboardDetector{
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr dynamicPointsPub_;
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr rawDynamicPointsPub_;
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr downSamplePointsPub_;
+        // Stable, public-API republish of the same cloud as downSamplePointsPub_
+        // (downSamplePointsPub_/"/downsampled_point_cloud" stays as-is for
+        // backward compat / internal debug use). This is the one other
+        // packages should depend on: /onboard_detector/lidar/processed —
+        // range+ground/roof+wall-bbox filtered, voxel-downsampled, frame odom.
+        rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr processedLidarPub_;
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr rawLidarPointsPub_;
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filteredLidarVelodynePub_;
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr yoloPointsPub_;

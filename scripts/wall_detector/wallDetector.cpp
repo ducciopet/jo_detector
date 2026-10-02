@@ -267,13 +267,22 @@ WallDetector::WallDetector(rclcpp::Node::SharedPtr nh)
     // Depth camera topic & frame
     depth_topic_ = p("depth_image_topic",
                      std::string("/front_camera/camera/depth/image_rect_raw"));
+    // bags/*_validation_lab only records aligned_depth_to_color as zstd (no
+    // compressedDepth variant at all — see calibration_icp_node's own
+    // depth_transport param for the same situation); override both
+    // together via cfg/launch when pointing this node at that bag.
+    depth_transport_ = p("depth_transport", std::string("compressedDepth"));
     depth_frame_ = p("depth_frame", std::string("camera_refined"));
 
-    // Depth intrinsics
+    // Depth intrinsics — starting values only, overwritten live the moment
+    // a message arrives on camera_info_topic_ (see cameraInfoCallback() and
+    // the subscription below); kept declared so the node still starts up
+    // usably if that topic is misconfigured or never publishes.
     std::vector<double> intrinsics_default = {436.96, 436.96, 431.92, 240.13};
     std::vector<double> intrinsics = p("depth_intrinsics", intrinsics_default);
     fx_ = intrinsics[0];  fy_ = intrinsics[1];
     cx_ = intrinsics[2];  cy_ = intrinsics[3];
+    camera_info_topic_ = p("camera_info_topic", std::string("/front_camera/camera/color/camera_info"));
 
     depth_scale_     = p("depth_scale_factor",  1000.0);
     depth_min_value_ = p("depth_min_value",     0.5);
@@ -299,6 +308,7 @@ WallDetector::WallDetector(rclcpp::Node::SharedPtr nh)
     max_planes_                = p("max_planes",               8);
     wall_bbox_max_aspect_ratio_= p("wall_bbox_max_aspect_ratio", 5.0);
     nested_merge_iov_thresh_   = p("nested_merge_iov_thresh",   0.5);
+    wall_detection_max_range_  = p("wall_detection_max_range",  0.0);  // 0 = unlimited
 
     // Registry config
     WallBBoxRegistry::Config reg_cfg;
@@ -324,10 +334,25 @@ WallDetector::WallDetector(rclcpp::Node::SharedPtr nh)
         "/wall_detector/ground_height", 10);
 
     // ---- Subscribers ----
-    // Depth image (for ground estimation — always active)
-    depth_sub_ = nh_->create_subscription<sensor_msgs::msg::Image>(
-        depth_topic_, rclcpp::SensorDataQoS(),
-        std::bind(&WallDetector::depthImageCallback, this, std::placeholders::_1));
+    // Depth image (for ground estimation — always active). Whatever
+    // depth_transport_ names (default "compressedDepth", the RealSense
+    // wrapper's default), the matching image_transport plugin decompresses
+    // transparently on receipt, so depthImageCallback below always gets a
+    // normal, uncompressed sensor_msgs::msg::Image. This is a single-topic
+    // subscription (no cross-topic sync), so it's unaffected by the zstd
+    // decode-stamp bug documented in calibration_icp_node.cpp — each frame
+    // is processed independently as it arrives regardless of its stamp.
+    depth_sub_ = image_transport::create_subscription(
+        nh_.get(), depth_topic_,
+        std::bind(&WallDetector::depthImageCallback, this, std::placeholders::_1),
+        depth_transport_, rmw_qos_profile_sensor_data);
+
+    // Live intrinsics — depth_intrinsics (already read into fx_/fy_/cx_/cy_
+    // above) is only the bootstrap value until the first message here
+    // arrives. See cameraInfoCallback()'s own comment.
+    camera_info_sub_ = nh_->create_subscription<sensor_msgs::msg::CameraInfo>(
+        camera_info_topic_, rclcpp::SensorDataQoS(),
+        std::bind(&WallDetector::cameraInfoCallback, this, std::placeholders::_1));
 
     // LiDAR (for wall detection — gated on enable flag and calibration)
     lidar_sub_ = nh_->create_subscription<sensor_msgs::msg::PointCloud2>(
@@ -335,11 +360,12 @@ WallDetector::WallDetector(rclcpp::Node::SharedPtr nh)
         std::bind(&WallDetector::pointCloudCallback, this, std::placeholders::_1));
 
     RCLCPP_INFO(nh_->get_logger(),
-        "[WallDetector] Depth on '%s', LiDAR on '%s', walls %s, "
-        "gated on calibration frame '%s'",
-        depth_topic_.c_str(), lidar_topic_.c_str(),
+        "[WallDetector] Depth on '%s' (transport=%s), LiDAR on '%s', walls %s, "
+        "gated on calibration frame '%s', intrinsics bootstrap fx=%.3f fy=%.3f cx=%.3f cy=%.3f live from '%s'",
+        depth_topic_.c_str(), depth_transport_.c_str(), lidar_topic_.c_str(),
         enable_wall_detection_ ? "ENABLED" : "DISABLED",
-        calibration_child_frame_.c_str());
+        calibration_child_frame_.c_str(),
+        fx_, fy_, cx_, cy_, camera_info_topic_.c_str());
 }
 
 // =====================================================================
@@ -356,67 +382,112 @@ void WallDetector::pointCloudCallback(
     }
     if (!enable_wall_detection_) return;
 
-    // 1. Convert to PCL
+    // 1. Convert to PCL. Deliberately stays in the LiDAR's own frame (e.g.
+    // "velodyne") for the whole detection pipeline below: RANSAC, plane
+    // classification, clustering and bbox-building are all relative
+    // geometry (distances, dot products, local PCA) — they give identical
+    // results no matter which frame the points are expressed in. Only the
+    // small set of FOUND WallBBoxes (center + rotation + size, ~15 numbers
+    // each — see WallBBox::transform()) needs transforming into the world
+    // frame afterward, at step 6c below — vastly cheaper every scan than
+    // transforming the ~29k raw points (previously done here) or even the
+    // few-hundred voxelized centroids.
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::fromROSMsg(*msg, *cloud);
 
     if (cloud->empty()) return;
 
-    // 2. Try to transform cloud to map frame via TF2
-    std::string working_frame = msg->header.frame_id;
+    // 2. Look up lidar -> map/odom once. Needed for two things below:
+    // rotating the ground/roof planes and the "up" direction into the lidar
+    // frame (so height/wall classification stays correct even if the
+    // sensor isn't perfectly level), and transforming the final WallBBoxes
+    // for the persistent registry (which only makes sense in one fixed
+    // world frame). Detection can't usefully continue without it — unlike
+    // the old code, which silently fell back to "sensor frame" processing
+    // on a failed lookup and could mix frames across scans in the registry
+    // — so a failed/disabled lookup skips this scan outright.
+    if (!use_tf_pose_) {
+        RCLCPP_WARN_THROTTLE(nh_->get_logger(), *nh_->get_clock(), 5000,
+            "[WallDetector] use_tf_pose is false; wall detection needs it to place boxes in "
+            "the world-frame registry, skipping.");
+        return;
+    }
+    Eigen::Isometry3d T_map_lidar = Eigen::Isometry3d::Identity();
+    try {
+        auto tf = tf_buffer_->lookupTransform(
+            odomFrame_, msg->header.frame_id,
+            tf2::TimePointZero, tf2::durationFromSec(0.1));
 
-    if (use_tf_pose_) {
-        try {
-            auto tf = tf_buffer_->lookupTransform(
-                odomFrame_, msg->header.frame_id,
-                tf2::TimePointZero, tf2::durationFromSec(0.1));
-
-            Eigen::Isometry3d T_map_lidar = Eigen::Isometry3d::Identity();
-            T_map_lidar.translation() = Eigen::Vector3d(
-                tf.transform.translation.x,
-                tf.transform.translation.y,
-                tf.transform.translation.z);
-            Eigen::Quaterniond q(
-                tf.transform.rotation.w,
-                tf.transform.rotation.x,
-                tf.transform.rotation.y,
-                tf.transform.rotation.z);
-            T_map_lidar.linear() = q.toRotationMatrix();
-
-            // Transform all points to map frame
-            for (auto& pt : cloud->points) {
-                Eigen::Vector3d p(pt.x, pt.y, pt.z);
-                p = T_map_lidar * p;
-                pt.x = static_cast<float>(p.x());
-                pt.y = static_cast<float>(p.y());
-                pt.z = static_cast<float>(p.z());
-            }
-
-            working_frame = odomFrame_;
-        } catch (const tf2::TransformException& ex) {
-            RCLCPP_WARN_THROTTLE(nh_->get_logger(), *nh_->get_clock(), 2000,
-                "[WallDetector] TF lookup failed: %s – working in sensor frame", ex.what());
-        }
+        T_map_lidar.translation() = Eigen::Vector3d(
+            tf.transform.translation.x,
+            tf.transform.translation.y,
+            tf.transform.translation.z);
+        Eigen::Quaterniond q(
+            tf.transform.rotation.w,
+            tf.transform.rotation.x,
+            tf.transform.rotation.y,
+            tf.transform.rotation.z);
+        T_map_lidar.linear() = q.toRotationMatrix();
+    } catch (const tf2::TransformException& ex) {
+        RCLCPP_WARN_THROTTLE(nh_->get_logger(), *nh_->get_clock(), 2000,
+            "[WallDetector] TF lookup failed: %s — skipping this scan", ex.what());
+        return;
     }
 
-    // 3. Voxel filter → extract centroids
-    std::vector<Eigen::Vector3d> centroids = voxelFilter(cloud);
+    // World +Z expressed in the lidar frame — reused below for both the
+    // ground/roof crop and isWallPlane()'s horizontal-normal test.
+    const Eigen::Vector3d up_lidar = T_map_lidar.linear().transpose() * Eigen::Vector3d::UnitZ();
 
+    // 3. Ground/roof height crop, in lidar frame, BEFORE voxel filtering.
+    // ground_height_/roof_height_ are map-frame Z values; a point p_lidar's
+    // map-frame height is up_lidar·p_lidar + T_map_lidar.translation().z()
+    // (by up_lidar's own definition above), so the crop reduces to bounding
+    // that one dot product — no per-point transform needed. This is a
+    // vertical crop only — deliberately NOT a horizontal/range crop, so a
+    // wall farther away than any assumed "sensor range" is still found;
+    // detecting a wall further out is instead a question of point density
+    // (VLP-16 angular resolution thins out with distance) — tune
+    // ransac_min_inliers_/voxel_resolution_ down if a real far wall in your
+    // scene is being missed for lack of inliers, not this crop.
+    if (ground_estimated_) {
+        const double tz = T_map_lidar.translation().z();
+        const double lo = ground_height_ - tz;
+        const double hi = roof_height_   - tz;
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cropped(new pcl::PointCloud<pcl::PointXYZ>);
+        cropped->points.reserve(cloud->points.size());
+        for (const auto& pt : cloud->points) {
+            const double h = up_lidar.x() * pt.x + up_lidar.y() * pt.y + up_lidar.z() * pt.z;
+            if (h >= lo && h <= hi) cropped->points.push_back(pt);
+        }
+        cropped->width    = static_cast<uint32_t>(cropped->points.size());
+        cropped->height   = 1;
+        cropped->is_dense = cloud->is_dense;
+        cloud = cropped;
+    }
+
+    // 4. Voxel filter → extract centroids (still lidar frame)
+    std::vector<Eigen::Vector3d> centroids = voxelFilter(cloud, msg->header.frame_id);
     if (static_cast<int>(centroids.size()) < 3) return;
 
-    // 4. Filter by ground/roof height (in map frame)
-    if (ground_estimated_) {
-        std::vector<Eigen::Vector3d> filtered;
-        filtered.reserve(centroids.size());
+    // 4b. Optional horizontal range cap, AFTER voxel filtering — i.e. on
+    // the few hundred already-downsampled centroids, not the raw ~29k-point
+    // scan, so enabling it costs next to nothing regardless of the range
+    // chosen. Disabled (0) by default: unlimited range, same reasoning as
+    // step 3 above. In lidar frame the sensor sits at the origin, so this
+    // is a plain distance-from-(0,0) check.
+    if (wall_detection_max_range_ > 0.0) {
+        const double max_range2 = wall_detection_max_range_ * wall_detection_max_range_;
+        std::vector<Eigen::Vector3d> ranged;
+        ranged.reserve(centroids.size());
         for (const auto& c : centroids) {
-            if (c.z() >= ground_height_ && c.z() <= roof_height_)
-                filtered.push_back(c);
+            if (c.x() * c.x() + c.y() * c.y() <= max_range2) ranged.push_back(c);
         }
-        centroids = std::move(filtered);
+        centroids = std::move(ranged);
         if (static_cast<int>(centroids.size()) < 3) return;
     }
 
-    // 5. Iterative RANSAC — wall planes only
+    // 5. Iterative RANSAC — wall planes only (lidar frame; frame-agnostic
+    // geometry, see isWallPlane's up_lidar argument)
     std::vector<PlaneModel> wall_planes;
     std::vector<Eigen::Vector3d> remaining = centroids;
 
@@ -425,11 +496,12 @@ void WallDetector::pointCloudCallback(
         PlaneModel plane;
         if (!ransacOnce(remaining, plane)) break;
 
-        if (isWallPlane(plane))
+        if (isWallPlane(plane, up_lidar))
             wall_planes.push_back(plane);
     }
 
-    // 6. Build wall bboxes from wall planes
+    // 6. Build wall bboxes from wall planes (lidar frame), then transform
+    // each FOUND box — not the point cloud — into the world frame.
     std::vector<WallBBox> wall_bboxes;
     wall_bboxes.reserve(wall_planes.size());
 
@@ -449,10 +521,16 @@ void WallDetector::pointCloudCallback(
         WallBBox bbox = buildWallBBox(contiguous, plane);
         if (!isWallBBoxCompact(bbox)) continue;
 
+        // 6c. Only the found box (center/rotation) gets transformed — see
+        // step 1's comment. Size is frame-invariant under a rigid transform.
+        bbox.transform(T_map_lidar);
         wall_bboxes.push_back(bbox);
     }
 
-    // 7. Merge nested/overlapping OBBs within this frame, then update registry
+    // 7. Merge nested/overlapping OBBs within this frame, then update
+    // registry — both already operate purely on WallBBox center/rotation/
+    // size, so nothing here needed to change for the lidar-frame detection
+    // above; every box entering this step is already in odomFrame_.
     if (!wall_bboxes.empty()) {
         const std::vector<WallBBox> merged =
             bbox_registry_->mergeNested(wall_bboxes, nested_merge_iov_thresh_);
@@ -460,10 +538,11 @@ void WallDetector::pointCloudCallback(
         bbox_registry_->update(merged, delta);
     }
 
-    // 8. Publish markers
+    // 8. Publish markers — always odomFrame_ now: the registry only ever
+    // holds boxes already transformed there (step 6c).
     std_msgs::msg::Header header;
     header.stamp    = msg->header.stamp;
-    header.frame_id = working_frame;
+    header.frame_id = odomFrame_;
     publishMarkers(header);
 
     // RCLCPP_INFO_THROTTLE(nh_->get_logger(), *nh_->get_clock(), 2000,
@@ -479,7 +558,8 @@ void WallDetector::pointCloudCallback(
 // =====================================================================
 
 std::vector<Eigen::Vector3d> WallDetector::voxelFilter(
-        const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud) {
+        const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud,
+        const std::string& cloud_frame_id) {
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::VoxelGrid<pcl::PointXYZ> vg;
@@ -489,11 +569,15 @@ std::vector<Eigen::Vector3d> WallDetector::voxelFilter(
                    static_cast<float>(voxel_resolution_));
     vg.filter(*filtered);
 
-    // Publish filtered cloud for debugging
+    // Publish filtered cloud for debugging. cloud is in the lidar's own
+    // frame now (detection no longer transforms the cloud — see
+    // pointCloudCallback), so just pass its frame straight through instead
+    // of guessing odomFrame_/"velodyne"; rviz (or anything else) transforms
+    // it to whatever fixed frame it's displayed in via TF as usual.
     if (filtered_cloud_pub_->get_subscription_count() > 0) {
         sensor_msgs::msg::PointCloud2 out_msg;
         pcl::toROSMsg(*filtered, out_msg);
-        out_msg.header.frame_id = use_tf_pose_ ? odomFrame_ : "velodyne";
+        out_msg.header.frame_id = cloud_frame_id;
         out_msg.header.stamp = nh_->now();
         filtered_cloud_pub_->publish(out_msg);
     }
@@ -619,9 +703,12 @@ bool WallDetector::ransacOnce(std::vector<Eigen::Vector3d>& pts,
 // Plane classification
 // =====================================================================
 
-bool WallDetector::isWallPlane(const PlaneModel& plane) const {
+bool WallDetector::isWallPlane(const PlaneModel& plane, const Eigen::Vector3d& up) const {
     const double sin_thr = std::sin(wall_vertical_angle_deg_ * M_PI / 180.0);
-    return std::abs(plane.normal.z()) < sin_thr;
+    // A wall's normal is horizontal, i.e. (near-)perpendicular to "up" — was
+    // plane.normal.z() when detection ran in map frame (where up = UnitZ());
+    // now generalized to whatever frame plane.normal is actually in.
+    return std::abs(plane.normal.dot(up)) < sin_thr;
 }
 
 // =====================================================================
@@ -891,6 +978,21 @@ void WallDetector::checkCalibrationReady() {
 // =====================================================================
 // Depth image callback — updates camera pose & runs ground estimation
 // =====================================================================
+// fx_/fy_/cx_/cy_ start out at whatever depth_intrinsics declared (see that
+// param's own comment above) and are overwritten here on every message —
+// camera_info_topic_ should be the COLOR camera's own info topic (K is in
+// pixel units against that camera's resolution, matching depth_topic_ being
+// an aligned-to-color stream). Not gated to "first message only": intrinsics
+// are physically fixed for a given camera, so re-applying the same K on
+// every message is a harmless no-op.
+void WallDetector::cameraInfoCallback(
+        const sensor_msgs::msg::CameraInfo::ConstSharedPtr& msg) {
+    fx_ = msg->k[0];
+    fy_ = msg->k[4];
+    cx_ = msg->k[2];
+    cy_ = msg->k[5];
+}
+
 void WallDetector::depthImageCallback(
         const sensor_msgs::msg::Image::ConstSharedPtr& msg) {
 

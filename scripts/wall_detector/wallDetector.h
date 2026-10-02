@@ -13,6 +13,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
+#include <image_transport/image_transport.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <tf2_ros/buffer.h>
@@ -24,6 +26,8 @@
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/passthrough.h>
+#include <pcl/common/transforms.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <random>
 #include <numeric>
@@ -138,7 +142,8 @@ private:
 
     // ---- Subscribers ----
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr lidar_sub_;
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr       depth_sub_;
+    image_transport::Subscriber                                    depth_sub_;
+    rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr   camera_info_sub_;
 
     // ---- Publishers ----
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr wall_markers_pub_;
@@ -184,7 +189,9 @@ private:
 
     // Frame names
     std::string depth_topic_;
+    std::string depth_transport_;  // image_transport plugin depth_topic_ needs: "compressedDepth" (RealSense default), "zstd", "raw", ...
     std::string depth_frame_;   // TF frame for the depth camera
+    std::string camera_info_topic_;  // live source for fx_/fy_/cx_/cy_ — see cameraInfoCallback()
 
     // ---- LiDAR wall-detection parameters ----
     std::string lidar_topic_;
@@ -203,12 +210,20 @@ private:
     double wall_bbox_max_aspect_ratio_;
     double nested_merge_iov_thresh_;   // IOV threshold for same-frame OBB merging
 
+    // Optional horizontal range cap for wall search, applied AFTER voxel
+    // filtering (on the already-downsampled centroids, so it's cheap
+    // regardless of value) — see pointCloudCallback. 0 (default) = disabled,
+    // unlimited range: a wall farther than any assumed "sensor range" is
+    // still found, only bounded by point density at that distance.
+    double wall_detection_max_range_;
+
     // RNG
     std::mt19937 rng_;
 
     // --- Callbacks ---
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
     void depthImageCallback(const sensor_msgs::msg::Image::ConstSharedPtr& msg);
+    void cameraInfoCallback(const sensor_msgs::msg::CameraInfo::ConstSharedPtr& msg);
 
     // --- Calibration gate ---
     void checkCalibrationReady();
@@ -217,8 +232,11 @@ private:
     void estimateGroundHeight();
 
     // --- Pipeline helpers (wall detection) ---
+    // cloud_frame_id: only used to stamp the debug filtered_cloud_pub_
+    // publish — voxelFilter itself is frame-agnostic.
     std::vector<Eigen::Vector3d> voxelFilter(
-        const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud);
+        const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud,
+        const std::string& cloud_frame_id);
 
     PlaneModel fitPlane(const Eigen::Vector3d& p0,
                         const Eigen::Vector3d& p1,
@@ -234,7 +252,10 @@ private:
     bool ransacOnce(std::vector<Eigen::Vector3d>& pts,
                     PlaneModel& best_plane);
 
-    bool isWallPlane(const PlaneModel& plane) const;
+    // up: world +Z expressed in whatever frame plane.normal is in — needed
+    // because detection now runs in the lidar's own frame (see
+    // pointCloudCallback), where "horizontal" isn't simply normal.z().
+    bool isWallPlane(const PlaneModel& plane, const Eigen::Vector3d& up) const;
 
     std::vector<Eigen::Vector3d> extractLargestContiguousCluster(
         const std::vector<Eigen::Vector3d>& inliers,
