@@ -102,6 +102,16 @@ namespace joDetector{
             std::cout << this->hint_ << ": Color image topic: " << this->colorImgTopicName_ << std::endl;
         }
 
+        // image_transport for depth/color: defaults match the robot's live drivers;
+        // "raw" is needed to replay bags that recorded uncompressed images
+        if (!this->nh_->get_parameter(pname("depth_transport"), this->depthTransport_)){
+            this->depthTransport_ = "compressedDepth";
+        }
+        if (!this->nh_->get_parameter(pname("color_transport"), this->colorTransport_)){
+            this->colorTransport_ = "compressed";
+        }
+        std::cout << this->hint_ << ": Depth/color transport: " << this->depthTransport_ << " / " << this->colorTransport_ << std::endl;
+
         // lidar topic name
         if (!this->nh_->get_parameter(pname("lidar_pointcloud_topic"), this->lidarTopicName_)){
             this->lidarTopicName_ = "/cloud_registered";
@@ -1406,12 +1416,12 @@ namespace joDetector{
     }   
 
     void dynamicDetector::registerCallback(){
-        // depth pose callback. "compressedDepth" transport: the
+        // depth pose callback. depth_transport (default "compressedDepth"): the
         // compressed_depth_image_transport plugin decompresses transparently
         // on receipt, so depthPoseCB/depthOdomCB below still get a normal,
         // uncompressed sensor_msgs::msg::Image — nothing else changes.
         this->depthSub_ = std::make_shared<image_transport::SubscriberFilter>();
-        this->depthSub_->subscribe(this->nh_.get(), this->depthTopicName_, "compressedDepth", rmw_qos_profile_sensor_data);
+        this->depthSub_->subscribe(this->nh_.get(), this->depthTopicName_, this->depthTransport_, rmw_qos_profile_sensor_data);
         this->lidarCloudSub_.reset(new message_filters::Subscriber<sensor_msgs::msg::PointCloud2>(this->nh_, this->lidarTopicName_));
         if (this->localizationMode_ == 0){
             this->poseSub_.reset(new message_filters::Subscriber<geometry_msgs::msg::PoseStamped>(this->nh_, this->poseTopicName_));
@@ -1438,14 +1448,14 @@ namespace joDetector{
             exit(0);
         }
 
-        // color image subscriber. "compressed" transport: the
+        // color image subscriber. color_transport (default "compressed"): the
         // compressed_image_transport plugin decompresses (JPEG/PNG)
         // transparently on receipt, so colorImgCB below still gets a normal,
         // uncompressed sensor_msgs::msg::Image.
         this->colorImgSub_ = image_transport::create_subscription(
             this->nh_.get(), this->colorImgTopicName_,
             std::bind(&dynamicDetector::colorImgCB, this, std::placeholders::_1),
-            "compressed", rmw_qos_profile_sensor_data);
+            this->colorTransport_, rmw_qos_profile_sensor_data);
 
         // yolo detection results subscriber
         this->yoloDetectionSub_ = this->nh_->create_subscription<vision_msgs::msg::Detection2DArray>(

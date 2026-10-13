@@ -33,6 +33,22 @@ def generate_launch_description():
         description='Use simulation clock')
     use_sim_time = LaunchConfiguration('use_sim_time')
 
+    # image_transport of the bag/driver: defaults match the robot's live RealSense drivers;
+    # pass raw for bags that recorded uncompressed images (e.g. bags/bags_benchmark)
+    depth_transport_arg = DeclareLaunchArgument(
+        'depth_transport', default_value='compressedDepth',
+        description='image_transport for the depth image (compressedDepth, zstd, raw, ...)')
+    depth_transport = LaunchConfiguration('depth_transport')
+
+    color_transport_arg = DeclareLaunchArgument(
+        'color_transport', default_value='compressed',
+        description='image_transport for the color image (compressed or raw)')
+    color_transport = LaunchConfiguration('color_transport')
+
+    rviz_arg = DeclareLaunchArgument(
+        'rviz', default_value='true',
+        description='Launch RViz')
+
     pkg_dir = get_package_share_directory('jo_detector')
     config_file = os.path.join(pkg_dir, 'cfg', 'detector_param_jo_zotac_outdoor.yaml')
     rviz_config_file = os.path.join(pkg_dir, 'rviz', 'detector_jo_zotac.rviz')
@@ -88,6 +104,7 @@ def generate_launch_description():
         parameters=[
             ParameterFile(config_file, allow_substs=True),
             {'use_sim_time': use_sim_time},
+            {'depth_transport': depth_transport},
         ],
     )
 
@@ -100,6 +117,8 @@ def generate_launch_description():
             ParameterFile(config_file, allow_substs=True),
             {'use_sim_time': use_sim_time},
             {'jo_detector.odom_topic': odom_topic},
+            {'jo_detector.depth_transport': depth_transport},
+            {'jo_detector.color_transport': color_transport},
         ],
     )
 
@@ -111,6 +130,7 @@ def generate_launch_description():
         parameters=[
             ParameterFile(config_file, allow_substs=True),
             {'use_sim_time': use_sim_time},
+            {'image_transport': color_transport},
         ],
     )
 
@@ -121,6 +141,7 @@ def generate_launch_description():
         output='screen',
         arguments=['-d', rviz_config_file],
         parameters=[{'use_sim_time': True}],
+        condition=IfCondition(LaunchConfiguration('rviz')),
     )
 
     wall_detector_node = Node(
@@ -131,6 +152,7 @@ def generate_launch_description():
         parameters=[
             ParameterFile(config_file, allow_substs=True),
             {'use_sim_time': use_sim_time},
+            {'wall_detector.depth_transport': depth_transport},
         ],
     )
 
@@ -149,6 +171,9 @@ def generate_launch_description():
     return LaunchDescription([
         odom_pub_arg,
         use_sim_time_arg,
+        depth_transport_arg,
+        color_transport_arg,
+        rviz_arg,
         pythonpath_action,
         static_tf_velodyne_to_camera_link_initial_guess,
         calibration_node,

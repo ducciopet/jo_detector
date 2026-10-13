@@ -147,6 +147,8 @@ namespace joDetector{
         int localizationMode_;
         std::string depthTopicName_;
         std::string colorImgTopicName_;
+        std::string depthTransport_;
+        std::string colorTransport_;
         std::string lidarTopicName_;
         std::string poseTopicName_;
         std::string odomTopicName_;

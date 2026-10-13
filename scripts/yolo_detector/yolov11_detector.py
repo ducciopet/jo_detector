@@ -10,7 +10,6 @@ from std_msgs.msg import Float64
 from sensor_msgs.msg import Image, CompressedImage
 from vision_msgs.msg import Detection2DArray
 from vision_msgs.msg import Detection2D
-from cv_bridge import CvBridge
 from ultralytics import YOLO
 from PIL import Image as PILImage, ImageDraw, ImageFont
 
@@ -34,6 +33,16 @@ def msg_to_cv2_fallback(msg):
     except Exception as e:
         print(f"Fallback conversion error: {e}")
         return None
+def cv2_to_bgr8_msg(img):
+    """BGR uint8 array -> sensor_msgs/Image (bgr8). Replaces cv_bridge, whose Python
+    extension is built against numpy 1.x and fails to import next to numpy>=2."""
+    msg = Image()
+    msg.height, msg.width = img.shape[:2]
+    msg.encoding = "bgr8"
+    msg.step = msg.width * 3
+    msg.data = np.ascontiguousarray(img, dtype=np.uint8).tobytes()
+    return msg
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 class yolo_detector(Node):
@@ -52,6 +61,7 @@ class yolo_detector(Node):
         self.timer_period_sec = float(self.declare_parameter('timer_period_sec', 0.033).value)
         self.inference_size = int(self.declare_parameter('inference_size', 352).value)
         self.queue_size = int(self.declare_parameter('queue_size', 10).value)
+        self.image_transport = str(self.declare_parameter('image_transport', 'compressed').value)  # 'compressed' or 'raw'
 
         missing = []
         if not self.image_topic:
@@ -93,9 +103,14 @@ class yolo_detector(Node):
         # image_transport::Publisher-based driver, e.g. realsense2_camera,
         # as long as compressed_image_transport is installed — see
         # docker/Dockerfile).
-        self.br = CvBridge()
-        self.img_sub = self.create_subscription(
-            CompressedImage, self.image_topic + '/compressed', self.image_callback, self.queue_size)
+        # image_transport:=raw subscribes to the plain Image topic instead (bags
+        # that recorded uncompressed images).
+        if self.image_transport == 'raw':
+            self.img_sub = self.create_subscription(
+                Image, self.image_topic, self.raw_image_callback, self.queue_size)
+        else:
+            self.img_sub = self.create_subscription(
+                CompressedImage, self.image_topic + '/compressed', self.image_callback, self.queue_size)
 
         # publisher
         self.img_pub = self.create_publisher(Image, self.detected_image_topic, self.queue_size)
@@ -135,6 +150,18 @@ class yolo_detector(Node):
             self.get_logger().error(f"Image callback error: {type(e).__name__}: {e}")
             self.img_received = False
 
+    def raw_image_callback(self, msg):
+        img = msg_to_cv2_fallback(msg)
+        if img is None:
+            self.get_logger().error(f"Unsupported raw image encoding '{msg.encoding}'")
+            self.img_received = False
+            return
+        self.img = img
+        self.img_received = True
+        if not hasattr(self, '_first_image_logged'):
+            self.get_logger().info(f"First image received on {self.img_sub.topic_name} ({msg.width}x{msg.height}, encoding={msg.encoding})")
+            self._first_image_logged = True
+
     def detect_callback(self):
         start_time = time.time()
         if self.img_received and hasattr(self, 'img') and self.img is not None:
@@ -157,7 +184,7 @@ class yolo_detector(Node):
 
     def vis_callback(self):
         if self.img_detected:
-            img_msg = self.br.cv2_to_imgmsg(self.detected_img, "bgr8")
+            img_msg = cv2_to_bgr8_msg(self.detected_img)
             img_msg.header.stamp = self.get_clock().now().to_msg()
             self.img_pub.publish(img_msg)
 
