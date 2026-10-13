@@ -45,6 +45,13 @@ def generate_launch_description():
         description='image_transport for the color image (compressed or raw)')
     color_transport = LaunchConfiguration('color_transport')
 
+    # camera_info the calibration node reads its live intrinsics from. The default is the node's
+    # own (color camera_info, right for an aligned depth stream); a bag that only has the raw
+    # depth image needs the DEPTH camera_info here, or ICP deprojects it with the wrong K.
+    calibration_camera_info_topic_arg = DeclareLaunchArgument(
+        'calibration_camera_info_topic', default_value='/front_camera/camera/color/camera_info',
+        description='camera_info for calibration_icp_node live intrinsics')
+
     rviz_arg = DeclareLaunchArgument(
         'rviz', default_value='true',
         description='Launch RViz')
@@ -105,6 +112,7 @@ def generate_launch_description():
             ParameterFile(config_file, allow_substs=True),
             {'use_sim_time': use_sim_time},
             {'depth_transport': depth_transport},
+            {'jo_detector.camera_info_topic': LaunchConfiguration('calibration_camera_info_topic')},
         ],
     )
 
@@ -173,6 +181,7 @@ def generate_launch_description():
         use_sim_time_arg,
         depth_transport_arg,
         color_transport_arg,
+        calibration_camera_info_topic_arg,
         rviz_arg,
         pythonpath_action,
         static_tf_velodyne_to_camera_link_initial_guess,
