@@ -6,7 +6,7 @@ import yaml
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterFile
 from ament_index_python.packages import get_package_share_directory
@@ -52,16 +52,31 @@ def generate_launch_description():
         'calibration_camera_info_topic', default_value='/front_camera/camera/color/camera_info',
         description='camera_info for calibration_icp_node live intrinsics')
 
+    # Same for wall_detector_node, which estimates the ground height from the depth image: its K must be the one
+    # of the depth image it reads (color on the robot, where depth is aligned; DEPTH on bags with raw depth only,
+    # or the floor comes out ~0.7 m too high and everything below it is cut away). Defaults to the topic above.
+    wall_camera_info_topic_arg = DeclareLaunchArgument(
+        'wall_camera_info_topic', default_value=LaunchConfiguration('calibration_camera_info_topic'),
+        description='camera_info for wall_detector_node ground estimation intrinsics')
+
     rviz_arg = DeclareLaunchArgument(
         'rviz', default_value='true',
         description='Launch RViz')
 
+    env_arg = DeclareLaunchArgument(
+        'env', default_value='outdoor',
+        description='Parameter set: cfg/detector_param_jo_zotac_<env>.yaml (indoor or outdoor)')
+
     pkg_dir = get_package_share_directory('jo_detector')
-    config_file = os.path.join(pkg_dir, 'cfg', 'detector_param_jo_zotac_outdoor.yaml')
+    config_file = PathJoinSubstitution(
+        [pkg_dir, 'cfg', ['detector_param_jo_zotac_', LaunchConfiguration('env'), '.yaml']])
+    # launch-time values (topics, frames) are identical in both parameter sets, so they are
+    # read from the outdoor file
+    launch_config_file = os.path.join(pkg_dir, 'cfg', 'detector_param_jo_zotac_outdoor.yaml')
     rviz_config_file = os.path.join(pkg_dir, 'rviz', 'detector_jo_zotac.rviz')
 
-    calibration_params = _load_node_params(config_file, 'calibration_icp_node')
-    detector_params = _load_node_params(config_file, 'detector_node')
+    calibration_params = _load_node_params(launch_config_file, 'calibration_icp_node')
+    detector_params = _load_node_params(launch_config_file, 'detector_node')
     detector_onboard_params = detector_params.get('jo_detector', {}) if isinstance(detector_params, dict) else {}
     camera_frame_initial_guess = str(calibration_params.get('camera_frame_initial_guess', 'camera_initial_guess'))
 
@@ -161,6 +176,7 @@ def generate_launch_description():
             ParameterFile(config_file, allow_substs=True),
             {'use_sim_time': use_sim_time},
             {'wall_detector.depth_transport': depth_transport},
+            {'wall_detector.camera_info_topic': LaunchConfiguration('wall_camera_info_topic')},
         ],
     )
 
@@ -178,10 +194,12 @@ def generate_launch_description():
 
     return LaunchDescription([
         odom_pub_arg,
+        env_arg,
         use_sim_time_arg,
         depth_transport_arg,
         color_transport_arg,
         calibration_camera_info_topic_arg,
+        wall_camera_info_topic_arg,
         rviz_arg,
         pythonpath_action,
         static_tf_velodyne_to_camera_link_initial_guess,
