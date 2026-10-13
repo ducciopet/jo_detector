@@ -10,7 +10,7 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def main():
-    _pkg_share = get_package_share_directory("onboard_detector")
+    _pkg_share = get_package_share_directory("jo_detector")
     _scripts_dir = os.path.join(_pkg_share, "scripts", "yolo_detector")
     if _scripts_dir not in sys.path:
         sys.path.insert(0, _scripts_dir)

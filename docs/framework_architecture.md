@@ -1,6 +1,6 @@
-# onboard_detector — Framework Architecture
+# jo_detector — Framework Architecture
 
-This document describes the internal logic of every node and processing module in `onboard_detector`, from raw sensor data to classified and tracked 3D bounding boxes published to the navigation stack.
+This document describes the internal logic of every node and processing module in `jo_detector`, from raw sensor data to classified and tracked 3D bounding boxes published to the navigation stack.
 
 ---
 
@@ -92,7 +92,7 @@ This means the tracker, classifier, wall filtering, and YOLO association all ope
 
 ### Package-level responsibilities
 
-`onboard_detector` deliberately separates perception into several nodes:
+`jo_detector` deliberately separates perception into several nodes:
 
 - `calibration_icp_node` provides a refined camera/LiDAR extrinsic.
 - `wall_detector_node` provides ground height, roof height, and persistent wall OBBs.
@@ -259,7 +259,7 @@ This means there is no ROS callback-group based scheduling for the detector stag
 
 Wall OBB updates are the one explicitly protected shared structure: `wallBBoxes_` is guarded by `wallBBoxesMutex_` when received from `wall_detector_node` and when copied/used during point filtering. Most other sensor buffers are updated by ROS callbacks and consumed by the next `mainCB()` cycle as latest-value state.
 
-There is also a small service interface, `onboard_detector/get_dynamic_obstacles`, which returns nearby entries from `dynamicBBoxes_` sorted by distance from a requested point. It is a convenience/legacy query path over the dedicated dynamic list; the richer and more stable downstream interface is still the `jo_msgs/ObstacleArray` topic.
+There is also a small service interface, `jo_detector/get_dynamic_obstacles`, which returns nearby entries from `dynamicBBoxes_` sorted by distance from a requested point. It is a convenience/legacy query path over the dedicated dynamic list; the richer and more stable downstream interface is still the `jo_msgs/ObstacleArray` topic.
 
 ### Main internal buffers
 
@@ -1028,7 +1028,7 @@ A thin C++ node that subscribes to `/odometry/filtered` (EKF output from `robot_
 `visCB()` publishes both visualization topics and machine-readable obstacle messages. The most important output for downstream autonomy is:
 
 ```
-/onboard_detector/tracked_dynamic_obstacles
+/perception/tracked_dynamic_obstacles
 ```
 
 Its type is `jo_msgs/ObstacleArray`. Despite the topic name, it does **not** publish every confirmed track: purely static tracks are skipped. Each published element contains:
@@ -1073,7 +1073,7 @@ This avoids the old ambiguity where a label could say `dynamic` while the marker
 
 ### Main visualization topics
 
-The exact namespace depends on `detector_namespace`. With an empty namespace the publishers use the root topic names below; with `detector_namespace: onboard_detector`, the same names are prefixed with `/onboard_detector`.
+The exact namespace depends on `detector_namespace`. With an empty namespace the publishers use the root topic names below; with `detector_namespace: jo_detector`, the same names are prefixed with `/jo_detector`.
 
 | Topic | Content |
 |---|---|
@@ -1099,7 +1099,7 @@ These topics are for debugging and RViz interpretation. The stable machine inter
 
 ### Interaction with GLIM and Nav2
 
-GLIM subscribes to `/onboard_detector/tracked_dynamic_obstacles` in BBOX mode. It can remove raw LiDAR points using the bbox status, track age, velocity, and configured rejection geometry.
+GLIM subscribes to `/perception/tracked_dynamic_obstacles` in BBOX mode. It can remove raw LiDAR points using the bbox status, track age, velocity, and configured rejection geometry.
 
 Nav2 can consume the same obstacle stream through the custom dynamic obstacle layer. That layer builds 2D risk regions in the costmap using the obstacle velocity and status. Because both GLIM and Nav2 consume the same high-level message, the semantics above must remain consistent: `dynamic` means moving now; `potentially_dynamic` means semantically dynamic but currently stationary.
 

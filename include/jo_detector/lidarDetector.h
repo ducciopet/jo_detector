@@ -3,11 +3,11 @@
     ---------------------------------
     header file of lidar-based obstacle detector
 */
-#ifndef ONBOARDDETECTOR_LIDARDETECTOR_H
-#define ONBOARDDETECTOR_LIDARDETECTOR_H
+#ifndef JODETECTOR_LIDARDETECTOR_H
+#define JODETECTOR_LIDARDETECTOR_H
 
-#include <onboard_detector/dbscan.h>
-#include <onboard_detector/utils.h>
+#include <jo_detector/dbscan.h>
+#include <jo_detector/utils.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/common/common.h>
@@ -16,7 +16,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <Eigen/Eigen>
 
-namespace onboardDetector{
+namespace joDetector{
     struct Cluster
     {
         int cluster_id;
@@ -37,8 +37,8 @@ namespace onboardDetector{
     class lidarDetector{
     private:
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_; // current pointcloud
-        std::vector<onboardDetector::Cluster> clusters_; // current cluster list
-        std::vector<onboardDetector::box3D> bboxes_; // lidar bboxes
+        std::vector<joDetector::Cluster> clusters_; // current cluster list
+        std::vector<joDetector::box3D> bboxes_; // lidar bboxes
 
         // lidar DBSCAN parameters
         double eps_;
@@ -77,8 +77,8 @@ namespace onboardDetector{
 
         void getPointcloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud);
         void lidarDBSCAN();
-        std::vector<onboardDetector::Cluster>& getClusters();
-        std::vector<onboardDetector::box3D>& getBBoxes();
+        std::vector<joDetector::Cluster>& getClusters();
+        std::vector<joDetector::box3D>& getBBoxes();
     };
 }
 

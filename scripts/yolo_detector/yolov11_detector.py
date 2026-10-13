@@ -39,7 +39,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 class yolo_detector(Node):
     def __init__(self):
         super().__init__('yolov11_detector')
-        print("[onboardDetector]: yolo detector init...")
+        print("[joDetector]: yolo detector init...")
 
         self.image_topic = str(self.declare_parameter('image_topic', '').value)
         self.detected_image_topic = str(self.declare_parameter('detected_image_topic', '').value)

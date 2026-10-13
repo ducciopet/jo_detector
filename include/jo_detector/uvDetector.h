@@ -11,12 +11,12 @@
 #include <opencv2/core/types.hpp>
 #include <math.h>
 #include <vector>
-#include <onboard_detector/utils.h>
-#include <onboard_detector/kalmanFilter.h>
+#include <jo_detector/utils.h>
+#include <jo_detector/kalmanFilter.h>
 #include <queue>
 #include <Eigen/Dense>
 
-namespace onboardDetector{
+namespace joDetector{
     
     class UVbox
     {

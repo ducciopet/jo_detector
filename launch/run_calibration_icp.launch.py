@@ -21,7 +21,7 @@ def _load_node_params(config_path, node_name):
 
 
 def _launch_setup(context, *args, **kwargs):
-    pkg_dir = get_package_share_directory('onboard_detector')
+    pkg_dir = get_package_share_directory('jo_detector')
     env = LaunchConfiguration('env')
 
     config_file = os.path.join(pkg_dir, 'cfg', 'detector_param_jo_zotac_indoor.yaml')
@@ -63,7 +63,7 @@ def _launch_setup(context, *args, **kwargs):
     camera_frame_initial_guess = robot_tf_camera_frame if robot_tf_camera_frame else yaml_camera_frame_initial_guess
 
     calibration_node = Node(
-        package='onboard_detector',
+        package='jo_detector',
         executable='calibration_icp_node',
         name='calibration_icp_node',
         output='screen',
@@ -75,7 +75,7 @@ def _launch_setup(context, *args, **kwargs):
                 'use_sim_time': True,
                 'depth_topic': LaunchConfiguration('depth_topic'),
                 'depth_transport': LaunchConfiguration('depth_transport'),
-                'onboard_detector.depth_intrinsics': depth_intrinsics,
+                'jo_detector.depth_intrinsics': depth_intrinsics,
                 'camera_frame_initial_guess': camera_frame_initial_guess,
             },
         ],

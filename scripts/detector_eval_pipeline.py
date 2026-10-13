@@ -2,10 +2,10 @@
 """
 detector_eval_pipeline.py
 ─────────────────────────────────────────────────────────────────────────────
-Valuta la classificazione Dynamic / Potentially-Dynamic di onboard_detector
+Valuta la classificazione Dynamic / Potentially-Dynamic di jo_detector
 rispetto al ground truth Qualisys.
 
-Topic usato: /onboard_detector/tracked_dynamic_obstacles (jo_msgs/ObstacleArray)
+Topic usato: /perception/tracked_dynamic_obstacles (jo_msgs/ObstacleArray)
 Status constants (Obstacle.msg):
     STATUS_STATIC              = 0
     STATUS_DYNAMIC             = 1
@@ -29,7 +29,7 @@ Uso:
         --detector_ros_version jazzy \\
         --gt_ros_version       humble \\
         --output_dir    ./results/exp1 \\
-        [--detector_topic /onboard_detector/tracked_dynamic_obstacles] \\
+        [--detector_topic /perception/tracked_dynamic_obstacles] \\
         [--t_start 10.0] \\
         [--dyn_vel_thresh 0.15] \\
         [--match_dist_thresh 1.0] \\
@@ -1344,7 +1344,7 @@ def save_csv(out_dir: str, exp_name: str, results: dict, dyn_vel_thresh: float):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Valuta classificazione Dynamic/PotentiallyDynamic di onboard_detector")
+        description="Valuta classificazione Dynamic/PotentiallyDynamic di jo_detector")
     parser.add_argument("--detector_bag",          required=True,
                         help="Bag ROS2 con output del detector (.mcap o .db3)")
     parser.add_argument("--gt_bag",                required=True,
@@ -1368,7 +1368,7 @@ def main():
     parser.add_argument("--odom_time_offset", type=float, default=0.0,
                         help="Offset temporale applicato a /odometry/filtered nella modalità compare_in_qualisys")
     parser.add_argument("--detector_topic",
-                        default="/onboard_detector/tracked_dynamic_obstacles",
+                        default="/perception/tracked_dynamic_obstacles",
                         help="Topic ObstacleArray del detector")
     parser.add_argument("--detector_ros_version",  default="jazzy")
     parser.add_argument("--gt_ros_version",        default="humble")

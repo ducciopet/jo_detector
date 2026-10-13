@@ -96,7 +96,7 @@ class ShuffleNetV2(nn.Module):
         if load_param == False:
             self._initialize_weights()
         else:
-            print("[onboardDetector]: load param...")
+            print("[joDetector]: load param...")
 
     def forward(self, x):
         x = self.first_conv(x)

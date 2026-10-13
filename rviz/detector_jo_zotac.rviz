@@ -84,7 +84,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/dbscan_bboxes
+        Value: /jo_detector/dbscan_bboxes
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -96,7 +96,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/uv_bboxes
+        Value: /jo_detector/uv_bboxes
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -108,7 +108,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/visual_bboxes
+        Value: /jo_detector/visual_bboxes
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -120,7 +120,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/lidar_bboxes
+        Value: /jo_detector/lidar_bboxes
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -132,7 +132,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/filtered_before_yolo_bboxes
+        Value: /jo_detector/filtered_before_yolo_bboxes
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -144,7 +144,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/filtered_bboxes
+        Value: /jo_detector/filtered_bboxes
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
@@ -156,7 +156,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/tracked_bboxes
+        Value: /jo_detector/tracked_bboxes
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -168,7 +168,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/tracked_dynamic_obstacles_bboxes
+        Value: /perception/tracked_dynamic_obstacles_bboxes
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -180,7 +180,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/predicted_bboxes_active
+        Value: /jo_detector/predicted_bboxes_active
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -192,7 +192,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/predicted_bboxes_missed
+        Value: /jo_detector/predicted_bboxes_missed
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -204,7 +204,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/predicted_bboxes_unconfirmed
+        Value: /jo_detector/predicted_bboxes_unconfirmed
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -216,7 +216,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/dynamic_bboxes
+        Value: /jo_detector/dynamic_bboxes
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -228,7 +228,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/potentially_dynamic_bboxes
+        Value: /jo_detector/potentially_dynamic_bboxes
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -240,7 +240,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/history_trajectories
+        Value: /jo_detector/history_trajectories
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
@@ -252,7 +252,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/velocity_visualizaton
+        Value: /jo_detector/velocity_visualizaton
       Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
@@ -284,7 +284,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/filtered_point_cloud
+        Value: /jo_detector/filtered_point_cloud
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
@@ -318,7 +318,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/filtered_depth_cloud
+        Value: /jo_detector/filtered_depth_cloud
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -352,7 +352,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/dynamic_point_cloud
+        Value: /jo_detector/dynamic_point_cloud
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
@@ -387,7 +387,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/raw_lidar_point_cloud
+        Value: /jo_detector/raw_lidar_point_cloud
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -421,7 +421,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/yolo_points
+        Value: /jo_detector/yolo_points
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -465,7 +465,7 @@ Visualization Manager:
     #     Durability Policy: Volatile
     #     History Policy: Keep Last
     #     Reliability Policy: Reliable
-    #     Value: /onboard_detector/detected_depth_map
+    #     Value: /jo_detector/detected_depth_map
     #   Value: false
     # - Class: rviz_default_plugins/Image
     #   Enabled: false
@@ -479,7 +479,7 @@ Visualization Manager:
     #     Durability Policy: Volatile
     #     History Policy: Keep Last
     #     Reliability Policy: Reliable
-    #     Value: /onboard_detector/detected_u_depth_map
+    #     Value: /jo_detector/detected_u_depth_map
     #   Value: false
     # - Class: rviz_default_plugins/Image
     #   Enabled: true

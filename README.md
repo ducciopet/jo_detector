@@ -1,9 +1,11 @@
-# onboard_detector
+# jo_detector
 
 [![ROS 2 Jazzy](https://img.shields.io/badge/ROS%202-Jazzy-34C759?style=flat-square&logo=ros)](https://docs.ros.org/)
 [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
 
 Real-time 3D dynamic obstacle detection and tracking for the Jo robot platform. Fuses depth camera, LiDAR, and YOLO 2D detections to produce tracked, classified 3D bounding boxes suitable for downstream navigation and collision avoidance.
+
+Originally derived from Zhefan Xu's [LV-DOT](https://github.com/Zhefan-Xu/LV-DOT) (`onboard_detector`, MIT license); `dbscan`, `uvDetector` and `kalmanFilter` keep its original structure. This package was renamed from `onboard_detector` to `jo_detector` to avoid confusion with the upstream package.
 
 ---
 
@@ -78,17 +80,17 @@ The main perception node. Runs the full UV + DBSCAN + LiDAR detection, sensor fu
 | `lidar_pointcloud_topic` | `sensor_msgs/PointCloud2` | 3D LiDAR scan |
 | `odom_topic` / `pose_topic` | `nav_msgs/Odometry` or `geometry_msgs/PoseStamped` | Robot localization |
 | `/yolo_detector/detected_bounding_boxes` | `vision_msgs/Detection2DArray` | 2D YOLO detections |
-| `/onboard_detector/ground_height` | `std_msgs/Float64MultiArray` | Ground and roof height from `wall_detector_node` |
+| `/jo_detector/ground_height` | `std_msgs/Float64MultiArray` | Ground and roof height from `wall_detector_node` |
 
 **Published topics**
 
 | Topic | Type | Description |
 |---|---|---|
-| `/onboard_detector/filtered_bboxes` | `visualization_msgs/MarkerArray` | All tracked 3D boxes |
-| `/onboard_detector/dynamic_bboxes` | `visualization_msgs/MarkerArray` | Confirmed dynamic obstacles (red) |
-| `/onboard_detector/potentially_dynamic_bboxes` | `visualization_msgs/MarkerArray` | YOLO-identified but near-stationary (green) |
-| `/onboard_detector/dynamic_obstacles` | `jo_msgs/ObstacleArray` | Typed message array for navigation |
-| `/onboard_detector/predicted_bboxes` | `visualization_msgs/MarkerArray` | Kalman-predicted future positions |
+| `/jo_detector/filtered_bboxes` | `visualization_msgs/MarkerArray` | All tracked 3D boxes |
+| `/jo_detector/dynamic_bboxes` | `visualization_msgs/MarkerArray` | Confirmed dynamic obstacles (red) |
+| `/jo_detector/potentially_dynamic_bboxes` | `visualization_msgs/MarkerArray` | YOLO-identified but near-stationary (green) |
+| `/jo_detector/dynamic_obstacles` | `jo_msgs/ObstacleArray` | Typed message array for navigation |
+| `/jo_detector/predicted_bboxes` | `visualization_msgs/MarkerArray` | Kalman-predicted future positions |
 | `/yolo_points` | `sensor_msgs/PointCloud2` | Depth points inside YOLO detections (debug) |
 | `/filtered_before_yolo_bboxes` | `visualization_msgs/MarkerArray` | Fused 3D boxes before YOLO association (debug) |
 
@@ -101,8 +103,8 @@ Runs RANSAC on the LiDAR scan to detect vertical planes (walls) and estimates th
 **Subscribed topics:** LiDAR point cloud, depth image
 
 **Published topics:**
-- `/onboard_detector/ground_height` — `std_msgs/Float64MultiArray` `[ground_height, roof_height]`
-- `/onboard_detector/wall_bboxes` — `visualization_msgs/MarkerArray` oriented wall bounding boxes
+- `/jo_detector/ground_height` — `std_msgs/Float64MultiArray` `[ground_height, roof_height]`
+- `/jo_detector/wall_bboxes` — `visualization_msgs/MarkerArray` oriented wall bounding boxes
 - Filtered LiDAR cloud and debug depth cloud (for RViz)
 
 **Key behaviours:**
@@ -159,7 +161,7 @@ Launch with `odom_pub:=true`.
 ## Launch
 
 ```bash
-ros2 launch onboard_detector run_detector.launch.py
+ros2 launch jo_detector run_detector.launch.py
 ```
 
 Optional arguments:
@@ -232,10 +234,10 @@ source /opt/ros/jazzy/setup.bash
 source /home/ros/local_install/setup.bash
 
 # First build or after a directory/symlink conflict:
-rm -rf /home/ros/build/onboard_detector /home/ros/local_install/onboard_detector
+rm -rf /home/ros/build/jo_detector /home/ros/local_install/jo_detector
 
 colcon build \
-    --packages-select onboard_detector \
+    --packages-select jo_detector \
     --symlink-install \
     --install-base /home/ros/local_install
 

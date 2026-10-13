@@ -4,7 +4,7 @@
 	Run detector node
 */
 #include <rclcpp/rclcpp.hpp>
-#include <onboard_detector/dynamicDetector.h>
+#include <jo_detector/dynamicDetector.h>
 
 int main(int argc, char** argv){
 	rclcpp::init(argc, argv);
@@ -12,7 +12,7 @@ int main(int argc, char** argv){
 	options.automatically_declare_parameters_from_overrides(true);
 	auto nh = std::make_shared<rclcpp::Node>("detector_node", options);
 
-	onboardDetector::dynamicDetector d (nh);
+	joDetector::dynamicDetector d (nh);
 
 	rclcpp::spin(nh);
 	rclcpp::shutdown();

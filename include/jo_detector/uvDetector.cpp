@@ -4,10 +4,10 @@
     helper class function definitions for uv detector
 */
 
-#include <onboard_detector/uvDetector.h>
+#include <jo_detector/uvDetector.h>
 
 // UVbox
-namespace onboardDetector{
+namespace joDetector{
     UVbox::UVbox()
     {
         this->id = 0;

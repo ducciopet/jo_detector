@@ -7,7 +7,7 @@ import os
 from launch_ros.descriptions import ParameterFile
 
 def generate_launch_description():
-    pkg_dir = get_package_share_directory('onboard_detector')
+    pkg_dir = get_package_share_directory('jo_detector')
     
     # Path to parameters file
     config_file = os.path.join(pkg_dir, 'cfg', 'detector_param_jo_zotac.yaml')
@@ -18,7 +18,7 @@ def generate_launch_description():
     return LaunchDescription([
         # Calibration node
         Node(
-            package='onboard_detector',
+            package='jo_detector',
             executable='calibration_node',
             name='calibration_node',
             output='screen',

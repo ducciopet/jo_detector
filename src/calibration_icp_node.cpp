@@ -64,15 +64,15 @@ public:
         // fx/fy/cx/cy). Kept declared so the node still starts up usably if
         // camera_info_topic_ is misconfigured or never publishes.
         std::vector<double> depth_intrinsics = this->declare_parameter(
-            "onboard_detector.depth_intrinsics",
+            "jo_detector.depth_intrinsics",
             std::vector<double>{436.9647521972656, 436.9647521972656, 431.9205627441406, 240.13380432128906});
         camera_info_topic_ = this->declare_parameter(
-            "onboard_detector.camera_info_topic", std::string("/front_camera/camera/color/camera_info"));
+            "jo_detector.camera_info_topic", std::string("/front_camera/camera/color/camera_info"));
 
-        depth_scale_ = this->declare_parameter("onboard_detector.depth_scale_factor", 1000.0);
-        depth_min_ = this->declare_parameter("onboard_detector.depth_min_value", 0.5);
-        depth_max_ = this->declare_parameter("onboard_detector.depth_max_value", 5.0);
-        depth_skip_ = this->declare_parameter("onboard_detector.depth_skip_pixel", 2);
+        depth_scale_ = this->declare_parameter("jo_detector.depth_scale_factor", 1000.0);
+        depth_min_ = this->declare_parameter("jo_detector.depth_min_value", 0.5);
+        depth_max_ = this->declare_parameter("jo_detector.depth_max_value", 5.0);
+        depth_skip_ = this->declare_parameter("jo_detector.depth_skip_pixel", 2);
 
         lidar_frame_ = this->declare_parameter("lidar_frame", std::string("velodyne"));
         camera_frame_ = this->declare_parameter("urdf_camera_frame", std::string("camera"));
@@ -394,7 +394,7 @@ private:
         }
     }
 
-    // fx_/fy_/cx_/cy_ start out at whatever onboard_detector.depth_intrinsics
+    // fx_/fy_/cx_/cy_ start out at whatever jo_detector.depth_intrinsics
     // declared and are overwritten here on every message — camera_info_topic_
     // should be the COLOR camera's own info topic (K is in pixel units
     // against that camera's resolution, matching depth_topic_ being an

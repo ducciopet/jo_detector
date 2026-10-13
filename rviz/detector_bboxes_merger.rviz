@@ -31,14 +31,14 @@ Visualization Manager:
       Name: Filtered BBoxes Before YOLO
       Enabled: true
       Topic:
-        Value: /onboard_detector/filtered_before_yolo_bboxes
+        Value: /jo_detector/filtered_before_yolo_bboxes
       Queue Size: 10
 
     - Class: rviz_default_plugins/MarkerArray
       Name: Visual BBoxes
       Enabled: true
       Topic:
-        Value: /onboard_detector/visual_bboxes
+        Value: /jo_detector/visual_bboxes
       Queue Size: 10
     - Alpha: 0.5
       Cell Size: 1
@@ -62,42 +62,42 @@ Visualization Manager:
       Name: UV BBoxes
       Enabled: true
       Topic:
-        Value: /onboard_detector/uv_bboxes
+        Value: /jo_detector/uv_bboxes
       Queue Size: 10
 
     - Class: rviz_default_plugins/MarkerArray
       Name: UV BBoxes Filtered
       Enabled: true
       Topic:
-        Value: /onboard_detector/uv_bboxes_filtered
+        Value: /jo_detector/uv_bboxes_filtered
       Queue Size: 10
 
     - Class: rviz_default_plugins/MarkerArray
       Name: DBSCAN BBoxes
       Enabled: true
       Topic:
-        Value: /onboard_detector/dbscan_bboxes
+        Value: /jo_detector/dbscan_bboxes
       Queue Size: 10
 
     - Class: rviz_default_plugins/MarkerArray
       Name: DBSCAN BBoxes Filtered
       Enabled: true
       Topic:
-        Value: /onboard_detector/dbscan_bboxes_filtered
+        Value: /jo_detector/dbscan_bboxes_filtered
       Queue Size: 10
 
     - Class: rviz_default_plugins/MarkerArray
       Name: LiDAR BBoxes
       Enabled: true
       Topic:
-        Value: /onboard_detector/lidar_bboxes
+        Value: /jo_detector/lidar_bboxes
       Queue Size: 10
 
     - Class: rviz_default_plugins/MarkerArray
       Name: LiDAR BBoxes Filtered
       Enabled: true
       Topic:
-        Value: /onboard_detector/lidar_bboxes_filtered
+        Value: /jo_detector/lidar_bboxes_filtered
       Queue Size: 10
 
     - Alpha: 1
@@ -125,7 +125,7 @@ Visualization Manager:
       Size (m): 0.10000000149011612
       Style: Spheres
       Topic:
-        Value: /onboard_detector/filtered_depth_cloud
+        Value: /jo_detector/filtered_depth_cloud
       Use Fixed Frame: true
       Use rainbow: true
 
@@ -154,7 +154,7 @@ Visualization Manager:
       Size (m): 0.10000000149011612
       Style: Flat Squares
       Topic:
-        Value: /onboard_detector/filtered_point_cloud
+        Value: /jo_detector/filtered_point_cloud
       Use Fixed Frame: true
       Use rainbow: true
     - Class: rviz_default_plugins/Axes
@@ -207,7 +207,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /onboard_detector/raw_lidar_point_cloud
+        Value: /jo_detector/raw_lidar_point_cloud
       Use Fixed Frame: true
       Use rainbow: true
       Value: true    

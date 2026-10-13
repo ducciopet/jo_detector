@@ -3,9 +3,9 @@
     ------------------
     class function definitions for lidar-based obstacle detector
 */
-#include <onboard_detector/lidarDetector.h>
+#include <jo_detector/lidarDetector.h>
 
-namespace onboardDetector{
+namespace joDetector{
 
     lidarDetector::lidarDetector(){
     }
@@ -80,11 +80,11 @@ namespace onboardDetector{
 
         dbscan.run();
 
-        std::vector<onboardDetector::Cluster> clustersTemp;
-        std::vector<onboardDetector::box3D> bboxesTemp;
+        std::vector<joDetector::Cluster> clustersTemp;
+        std::vector<joDetector::box3D> bboxesTemp;
 
         if (this->dbscanRefinementEnable_){
-            std::vector<onboardDetector::ClusterRefined> refinedClusters;
+            std::vector<joDetector::ClusterRefined> refinedClusters;
             dbscan.getRefinedClustersWithAABB(refinedClusters);
 
             clustersTemp.resize(refinedClusters.size());
@@ -111,7 +111,7 @@ namespace onboardDetector{
                     refined.box.max_pt.y() - refined.box.min_pt.y(),
                     refined.box.max_pt.z() - refined.box.min_pt.z());
 
-                onboardDetector::box3D bbox;
+                joDetector::box3D bbox;
                 bbox.id = static_cast<int>(i);
                 bbox.x = 0.5 * (refined.box.min_pt.x() + refined.box.max_pt.x());
                 bbox.y = 0.5 * (refined.box.min_pt.y() + refined.box.max_pt.y());
@@ -128,7 +128,7 @@ namespace onboardDetector{
         else{
             int clusterNum = 0;
             for (size_t i = 0; i < dbscan.m_points.size(); ++i){
-                const onboardDetector::Point& pDB = dbscan.m_points[i];
+                const joDetector::Point& pDB = dbscan.m_points[i];
                 if (pDB.clusterID > clusterNum){
                     clusterNum = pDB.clusterID;
                 }
@@ -166,7 +166,7 @@ namespace onboardDetector{
                     maxPt.y - minPt.y,
                     maxPt.z - minPt.z);
 
-                onboardDetector::box3D bbox;
+                joDetector::box3D bbox;
                 bbox.id = static_cast<int>(i);
                 bbox.x = 0.5 * (minPt.x + maxPt.x);
                 bbox.y = 0.5 * (minPt.y + maxPt.y);
@@ -185,11 +185,11 @@ namespace onboardDetector{
         this->bboxes_ = bboxesTemp;
     }
 
-    std::vector<onboardDetector::Cluster>& lidarDetector::getClusters(){
+    std::vector<joDetector::Cluster>& lidarDetector::getClusters(){
         return this->clusters_;
     }
 
-    std::vector<onboardDetector::box3D>& lidarDetector::getBBoxes(){
+    std::vector<joDetector::box3D>& lidarDetector::getBBoxes(){
         return this->bboxes_;
     }
 }

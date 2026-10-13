@@ -7,8 +7,8 @@
     Also estimates ground/roof height from the depth camera (RANSAC on
     bottom rows of the depth image) and publishes them for other nodes.
 */
-#ifndef ONBOARD_DETECTOR_WALL_DETECTOR_H
-#define ONBOARD_DETECTOR_WALL_DETECTOR_H
+#ifndef JO_DETECTOR_WALL_DETECTOR_H
+#define JO_DETECTOR_WALL_DETECTOR_H
 
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -34,7 +34,7 @@
 #include <unordered_map>
 #include <functional>
 
-namespace onboardDetector {
+namespace joDetector {
 
 // =====================================================================
 // PlaneModel
@@ -270,6 +270,6 @@ private:
     void publishMarkers(const std_msgs::msg::Header& header);
 };
 
-} // namespace onboardDetector
+} // namespace joDetector
 
 #endif

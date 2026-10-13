@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace onboardDetector {
+namespace joDetector {
 
 // =====================================================================
 //  WallBBoxRegistry
@@ -1177,4 +1177,4 @@ void WallDetector::estimateGroundHeight() {
     //     ground_height_, roof_height_, bestInliers, zValues.size());
 }
 
-} // namespace onboardDetector
+} // namespace joDetector

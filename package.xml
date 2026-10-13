@@ -1,10 +1,11 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>onboard_detector</name>
+  <name>jo_detector</name>
   <version>1.0.0</version>
-  <description>The onboard detector package for dynamic object detection.</description>
+  <description>The jo_detector package for dynamic object detection.</description>
 
-  <maintainer email="zhefanx@andrew.cmu.edu">Zhefan Xu</maintainer>
+  <maintainer email="duccio.petreni@student.unisi.it">ducciopet</maintainer>
+  <author email="zhefanx@andrew.cmu.edu">Zhefan Xu</author>
   <license>MIT</license>
 
   <!-- Build system -->

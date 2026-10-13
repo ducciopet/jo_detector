@@ -1,7 +1,7 @@
-#include <onboard_detector/dbscan.h>
+#include <jo_detector/dbscan.h>
 #include <iostream>
 
-namespace onboardDetector {
+namespace joDetector {
 
     int DBSCAN::run()
     {
@@ -434,4 +434,4 @@ namespace onboardDetector {
         return subclusters.size() >= 2;
     }
 
-} // namespace onboardDetector
+} // namespace joDetector

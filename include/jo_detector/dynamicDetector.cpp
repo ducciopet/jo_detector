@@ -3,18 +3,18 @@
     ---------------------------------
     function implementation of dynamic osbtacle detector
 */
-#include <onboard_detector/dynamicDetector.h>
+#include <jo_detector/dynamicDetector.h>
 
-namespace onboardDetector{
+namespace joDetector{
     // Ensure nextTrackId_ is initialized in the constructor
     dynamicDetector::dynamicDetector() : nextTrackId_(0) {
-        this->ns_ = "onboard_detector";
-        this->hint_ = "[onboardDetector]";
+        this->ns_ = "jo_detector";
+        this->hint_ = "[joDetector]";
     }
 
     dynamicDetector::dynamicDetector(const rclcpp::Node::SharedPtr& nh){
-        this->ns_ = "onboard_detector";
-        this->hint_ = "[onboardDetector]";
+        this->ns_ = "jo_detector";
+        this->hint_ = "[joDetector]";
         this->nh_ = nh;
         this->tfBuffer_ = std::make_shared<tf2_ros::Buffer>(this->nh_->get_clock());
         this->tfListener_ = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer_, this->nh_, false);
@@ -1387,7 +1387,7 @@ namespace onboardDetector{
         // (jo_navigation costmap, wall_detector, ...) to consume instead of
         // re-filtering raw /velodyne_points themselves. See processedLidarPub_
         // declaration in dynamicDetector.h.
-        this->processedLidarPub_ = this->nh_->create_publisher<sensor_msgs::msg::PointCloud2>(this->ns_.empty() ? "/onboard_detector/lidar/processed" : this->ns_ + "/onboard_detector/lidar/processed", 10);
+        this->processedLidarPub_ = this->nh_->create_publisher<sensor_msgs::msg::PointCloud2>(this->ns_.empty() ? "/jo_detector/lidar/processed" : this->ns_ + "/jo_detector/lidar/processed", 10);
 
         // raw LiDAR points visualization pub
         this->rawLidarPointsPub_ = this->nh_->create_publisher<sensor_msgs::msg::PointCloud2>(this->ns_.empty() ? "/raw_lidar_point_cloud" : this->ns_ + "/raw_lidar_point_cloud", 10);
@@ -1471,24 +1471,24 @@ namespace onboardDetector{
             std::bind(&dynamicDetector::visCB, this));
 
         // get dynamic obstacle service
-        this->getDynamicObstacleServer_ = this->nh_->create_service<onboard_detector::srv::GetDynamicObstacles>(
-            "onboard_detector/get_dynamic_obstacles",
-            [this](const std::shared_ptr<onboard_detector::srv::GetDynamicObstacles::Request> req,
-                   std::shared_ptr<onboard_detector::srv::GetDynamicObstacles::Response> res) -> void {
+        this->getDynamicObstacleServer_ = this->nh_->create_service<jo_detector::srv::GetDynamicObstacles>(
+            "jo_detector/get_dynamic_obstacles",
+            [this](const std::shared_ptr<jo_detector::srv::GetDynamicObstacles::Request> req,
+                   std::shared_ptr<jo_detector::srv::GetDynamicObstacles::Response> res) -> void {
                 this->getDynamicObstacles(req, res);
             });
     }
 
-    bool dynamicDetector::getDynamicObstacles(const std::shared_ptr<onboard_detector::srv::GetDynamicObstacles::Request> req,
-                                              std::shared_ptr<onboard_detector::srv::GetDynamicObstacles::Response> res) {
+    bool dynamicDetector::getDynamicObstacles(const std::shared_ptr<jo_detector::srv::GetDynamicObstacles::Request> req,
+                                              std::shared_ptr<jo_detector::srv::GetDynamicObstacles::Response> res) {
         // Get the current robot position
         Eigen::Vector3d currPos = Eigen::Vector3d (req->current_position.x, req->current_position.y, req->current_position.z);
 
         // Vector to store obstacles along with their distances
-        std::vector<std::pair<double, onboardDetector::box3D>> obstaclesWithDistances;
+        std::vector<std::pair<double, joDetector::box3D>> obstaclesWithDistances;
 
         // Go through all obstacles and calculate distances
-        for (const onboardDetector::box3D& bbox : this->dynamicBBoxes_) {
+        for (const joDetector::box3D& bbox : this->dynamicBBoxes_) {
             Eigen::Vector3d obsPos(bbox.x, bbox.y, bbox.z);
             Eigen::Vector3d diff = currPos - obsPos;
             diff(2) = 0.;
@@ -1500,13 +1500,13 @@ namespace onboardDetector{
 
         // Sort obstacles by distance in ascending order
         std::sort(obstaclesWithDistances.begin(), obstaclesWithDistances.end(), 
-                [](const std::pair<double, onboardDetector::box3D>& a, const std::pair<double, onboardDetector::box3D>& b) {
+                [](const std::pair<double, joDetector::box3D>& a, const std::pair<double, joDetector::box3D>& b) {
                     return a.first < b.first;
                 });
 
         // Push sorted obstacles into the response
         for (const auto& item : obstaclesWithDistances) {
-            const onboardDetector::box3D& bbox = item.second;
+            const joDetector::box3D& bbox = item.second;
 
             geometry_msgs::msg::Vector3 pos;
             geometry_msgs::msg::Vector3 vel;
@@ -1949,7 +1949,7 @@ namespace onboardDetector{
         // Filter out bboxes whose bottom face is too high above ground
         {
             const double zminThresh = this->groundHeight_ + this->trackMaxZminAboveGround_;
-            std::vector<onboardDetector::box3D> keptBBoxes;
+            std::vector<joDetector::box3D> keptBBoxes;
             std::vector<std::vector<Eigen::Vector3d>> keptPc;
             std::vector<Eigen::Vector3d> keptCenters;
             std::vector<Eigen::Vector3d> keptStds;
@@ -2011,8 +2011,8 @@ namespace onboardDetector{
             outputTrackIds.insert(static_cast<int>(tb.id));
         }
 
-        std::vector<onboardDetector::box3D> dynamicBBoxesTemp;
-        std::vector<onboardDetector::box3D> potentiallyDynamicBBoxesTemp;
+        std::vector<joDetector::box3D> dynamicBBoxesTemp;
+        std::vector<joDetector::box3D> potentiallyDynamicBBoxesTemp;
 
         for (size_t i=0; i<this->pcHist_.size() ; ++i){
 
@@ -2248,10 +2248,10 @@ namespace onboardDetector{
         // Optional post-filter: discard dynamic bboxes whose dimensions are too far
         // from the expected target object sizes (e.g. person ≈ 0.5×0.5×1.7 m).
         if (this->constrainSize_){
-            std::vector<onboardDetector::box3D> dynamicBBoxesBeforeConstrain = dynamicBBoxesTemp;
+            std::vector<joDetector::box3D> dynamicBBoxesBeforeConstrain = dynamicBBoxesTemp;
             dynamicBBoxesTemp.clear();
 
-            for (onboardDetector::box3D ob : dynamicBBoxesBeforeConstrain){
+            for (joDetector::box3D ob : dynamicBBoxesBeforeConstrain){
                 bool findMatch = false;
                 for (Eigen::Vector3d targetSize : this->targetObjectSize_){
                     double xdiff = std::abs(ob.x_width - targetSize(0));
@@ -2422,7 +2422,7 @@ namespace onboardDetector{
     }
 
     void dynamicDetector::publishTrackedDynamicObstacleMarkers(){
-        std::vector<onboardDetector::box3D> obstacleBoxes;
+        std::vector<joDetector::box3D> obstacleBoxes;
         obstacleBoxes.reserve(this->trackedBBoxes_.size());
 
         for (const auto& box : this->trackedBBoxes_){
@@ -2492,14 +2492,14 @@ namespace onboardDetector{
 
             // transform to the world frame (recalculate the bounding boxes)
             // std::cout << "[DEBUG] Before transformUVBBoxes, uvBBoxes_ size = " << this->uvBBoxes_.size() << std::endl;
-            std::vector<onboardDetector::box3D> uvBBoxes;
+            std::vector<joDetector::box3D> uvBBoxes;
             this->transformUVBBoxes(uvBBoxes);
             // std::cout << "[DEBUG] After transformUVBBoxes, uvBBoxes size = " << uvBBoxes.size() << std::endl;
             this->uvBBoxes_ = uvBBoxes;
 
             // Filter UV bboxes — must happen here, after uvBBoxes_ is assigned,
             // NOT in dbscanDetect() where it ran on the previous frame's data.
-            std::vector<onboardDetector::box3D> filteredUVBBoxes;
+            std::vector<joDetector::box3D> filteredUVBBoxes;
             for (const auto& box : this->uvBBoxes_) {
                 if (!this->isOversizedBBox(box)) {
                     filteredUVBBoxes.push_back(box);
@@ -2509,7 +2509,7 @@ namespace onboardDetector{
         }
     }
 
-    bool dynamicDetector::isOversizedBBox(const onboardDetector::box3D& bbox) const {
+    bool dynamicDetector::isOversizedBBox(const joDetector::box3D& bbox) const {
         const double xyDiag = std::sqrt(bbox.x_width * bbox.x_width +
                                         bbox.y_width * bbox.y_width);
         const double volume = bbox.x_width * bbox.y_width * bbox.z_width;
@@ -2533,7 +2533,7 @@ namespace onboardDetector{
                                      this->pcClusterCentersVisual_, this->pcClusterStdsVisual_);
 
         {
-            std::vector<onboardDetector::box3D> keptBBoxes;
+            std::vector<joDetector::box3D> keptBBoxes;
             std::vector<std::vector<Eigen::Vector3d>> keptClusters;
             std::vector<Eigen::Vector3d> keptCenters;
             std::vector<Eigen::Vector3d> keptStds;
@@ -2584,13 +2584,13 @@ namespace onboardDetector{
             this->lidarDetector_->getPointcloud(this->lidarCloud_);
             this->lidarDetector_->lidarDBSCAN();
 
-            std::vector<onboardDetector::Cluster> lidarClustersRaw = this->lidarDetector_->getClusters();
-            std::vector<onboardDetector::Cluster> lidarClustersFiltered;
-            std::vector<onboardDetector::box3D> lidarBBoxesRaw = this->lidarDetector_->getBBoxes();
-            std::vector<onboardDetector::box3D> lidarBBoxesFiltered;
+            std::vector<joDetector::Cluster> lidarClustersRaw = this->lidarDetector_->getClusters();
+            std::vector<joDetector::Cluster> lidarClustersFiltered;
+            std::vector<joDetector::box3D> lidarBBoxesRaw = this->lidarDetector_->getBBoxes();
+            std::vector<joDetector::box3D> lidarBBoxesFiltered;
 
             for (size_t i = 0; i < lidarBBoxesRaw.size(); ++i){
-                const onboardDetector::box3D& lidarBBox = lidarBBoxesRaw[i];
+                const joDetector::box3D& lidarBBox = lidarBBoxesRaw[i];
 
                 if (lidarBBox.x_width > this->maxObjectSize_(0) ||
                     lidarBBox.y_width > this->maxObjectSize_(1) ||
@@ -2609,8 +2609,8 @@ namespace onboardDetector{
     }
 
     void dynamicDetector::BboxesMerger(
-                                    const std::vector<onboardDetector::box3D>& group1BBoxes_,
-                                    const std::vector<onboardDetector::box3D>& group2BBoxes_,
+                                    const std::vector<joDetector::box3D>& group1BBoxes_,
+                                    const std::vector<joDetector::box3D>& group2BBoxes_,
 
                                     const std::vector<std::vector<Eigen::Vector3d>>& group1pcClusters_,
                                     const std::vector<Eigen::Vector3d>& group1pcClusterCenters_,
@@ -2620,7 +2620,7 @@ namespace onboardDetector{
                                     const std::vector<Eigen::Vector3d>& group2pcClusterCenters_,
                                     const std::vector<Eigen::Vector3d>& group2pcClusterStds_,
 
-                                    std::vector<onboardDetector::box3D>& BBoxesTemp,
+                                    std::vector<joDetector::box3D>& BBoxesTemp,
                                     std::vector<std::vector<Eigen::Vector3d>>& PcClustersTemp,
                                     std::vector<Eigen::Vector3d>& PcClusterCentersTemp,
                                     std::vector<Eigen::Vector3d>& PcClusterStdsTemp,
@@ -2662,7 +2662,7 @@ namespace onboardDetector{
         std::vector<bool> usedGroup2(N, false);
 
         double eps = 1e-6;
-        std::vector<onboardDetector::Edge> edges;
+        std::vector<joDetector::Edge> edges;
 
         // =========================
         // STEP 0: MATRICES
@@ -2728,7 +2728,7 @@ namespace onboardDetector{
                 double zmax = std::max(b1.z+b1.z_width/2, b2.z+b2.z_width/2);
                 double zmin = std::min(b1.z-b1.z_width/2, b2.z-b2.z_width/2);
 
-                onboardDetector::box3D bbox;
+                joDetector::box3D bbox;
                 bbox.x = (xmin+xmax)/2;
                 bbox.y = (ymin+ymax)/2;
                 bbox.z = (zmin+zmax)/2;
@@ -2788,7 +2788,7 @@ namespace onboardDetector{
 
                 if (iov1 < eps && iov2 < eps) continue;
 
-                onboardDetector::Edge e;
+                joDetector::Edge e;
 
                 if (iov1 > iov2)
                 {
@@ -2811,7 +2811,7 @@ namespace onboardDetector{
         // =========================
         // STEP 3: BEST PARENT
         // =========================
-        std::map<std::pair<int,bool>, onboardDetector::Edge> bestParent;
+        std::map<std::pair<int,bool>, joDetector::Edge> bestParent;
 
         for (const auto& e : edges)
         {
@@ -2827,7 +2827,7 @@ namespace onboardDetector{
         // =========================
         // STEP 4: GRAPH
         // =========================
-        std::map<std::pair<int,bool>, std::vector<onboardDetector::Node>> childrenMap;
+        std::map<std::pair<int,bool>, std::vector<joDetector::Node>> childrenMap;
         std::set<std::pair<int,bool>> allNodes, childNodes;
 
         for (const auto& kv : bestParent)
@@ -2863,13 +2863,13 @@ namespace onboardDetector{
                 // skip non-leaf
                 if (childrenMap.find(k) != childrenMap.end()) continue;
 
-                onboardDetector::Node leaf{k.first, k.second};
+                joDetector::Node leaf{k.first, k.second};
 
                 // =========================
                 // 🔥 TROVA IL PARENT (se esiste)
                 // =========================
                 bool hasParent = false;
-                onboardDetector::Node parentNode;
+                joDetector::Node parentNode;
 
                 for (const auto& kv : bestParent)
                 {
@@ -2893,7 +2893,7 @@ namespace onboardDetector{
                     if (childrenMap[parentKey].size() == 1)
                     {
                         // 👉 MERGE padre + figlio
-                        onboardDetector::box3D b1, b2;
+                        joDetector::box3D b1, b2;
                         std::vector<Eigen::Vector3d> cluster;
 
                         // leaf
@@ -2935,7 +2935,7 @@ namespace onboardDetector{
                         double zmax = std::max(b1.z+b1.z_width/2, b2.z+b2.z_width/2);
                         double zmin = std::min(b1.z-b1.z_width/2, b2.z-b2.z_width/2);
 
-                        onboardDetector::box3D bbox;
+                        joDetector::box3D bbox;
                         bbox.x = (xmin+xmax)/2;
                         bbox.y = (ymin+ymax)/2;
                         bbox.z = (zmin+zmax)/2;
@@ -2968,7 +2968,7 @@ namespace onboardDetector{
                 // =========================
                 // DEFAULT: SOLO LEAF
                 // =========================
-                onboardDetector::box3D bbox;
+                joDetector::box3D bbox;
                 std::vector<Eigen::Vector3d> cluster;
                 Eigen::Vector3d center, stddev;
 
@@ -2996,8 +2996,8 @@ namespace onboardDetector{
         else if (merging_style == "bigger")
         {
             // DFS per visitare il sottoalbero
-            std::function<void(const onboardDetector::Node&, std::vector<onboardDetector::Node>&)> dfs =
-            [&](const onboardDetector::Node& n, std::vector<onboardDetector::Node>& out)
+            std::function<void(const joDetector::Node&, std::vector<joDetector::Node>&)> dfs =
+            [&](const joDetector::Node& n, std::vector<joDetector::Node>& out)
             {
                 out.push_back(n);
 
@@ -3016,7 +3016,7 @@ namespace onboardDetector{
                     childNodes.insert({c.idx, c.is_group1});
             }
 
-            std::vector<onboardDetector::Node> roots;
+            std::vector<joDetector::Node> roots;
             for (const auto& k : allNodes)
             {
                 if (childNodes.find(k) == childNodes.end())
@@ -3026,7 +3026,7 @@ namespace onboardDetector{
             // MERGE PER OGNI ALBERO
             for (const auto& root : roots)
             {
-                std::vector<onboardDetector::Node> subtree;
+                std::vector<joDetector::Node> subtree;
                 dfs(root, subtree);
 
                 double xmin =  std::numeric_limits<double>::max();
@@ -3041,7 +3041,7 @@ namespace onboardDetector{
 
                 for (const auto& n : subtree)
                 {
-                    onboardDetector::box3D b;
+                    joDetector::box3D b;
 
                     // 👉 SCELTA CORRETTA DELLA SORGENTE (FIX PRINCIPALE)
                     if (n.is_group1)
@@ -3068,7 +3068,7 @@ namespace onboardDetector{
                 }
 
                 // bounding box finale
-                onboardDetector::box3D bbox;
+                joDetector::box3D bbox;
                 bbox.x = (xmin+xmax)/2;
                 bbox.y = (ymin+ymax)/2;
                 bbox.z = (zmin+zmax)/2;
@@ -3129,12 +3129,12 @@ namespace onboardDetector{
     }
 
     void dynamicDetector::mergeNestedGroup(
-        const std::vector<onboardDetector::box3D>& inBoxes,
+        const std::vector<joDetector::box3D>& inBoxes,
         const std::vector<std::vector<Eigen::Vector3d>>& inClusters,
         const std::vector<Eigen::Vector3d>& inCenters,
         const std::vector<Eigen::Vector3d>& inStds,
 
-        std::vector<onboardDetector::box3D>& outBoxes,
+        std::vector<joDetector::box3D>& outBoxes,
         std::vector<std::vector<Eigen::Vector3d>>& outClusters,
         std::vector<Eigen::Vector3d>& outCenters,
         std::vector<Eigen::Vector3d>& outStds)
@@ -3224,7 +3224,7 @@ namespace onboardDetector{
             {
                 std::vector<int> comp = { (int)i, best_j };
 
-                onboardDetector::box3D box;
+                joDetector::box3D box;
                 std::vector<Eigen::Vector3d> cluster;
                 Eigen::Vector3d center, stddev;
 
@@ -3334,7 +3334,7 @@ namespace onboardDetector{
                     q.push(c);
             }
 
-            onboardDetector::box3D box;
+            joDetector::box3D box;
             std::vector<Eigen::Vector3d> cluster;
             Eigen::Vector3d center, stddev;
 
@@ -3366,10 +3366,10 @@ namespace onboardDetector{
     }
 
     void dynamicDetector::mergeBoxesSet(
-        const std::vector<onboardDetector::box3D>& boxes,
+        const std::vector<joDetector::box3D>& boxes,
         const std::vector<std::vector<Eigen::Vector3d>>& clusters,
         const std::vector<int>& indices,
-        onboardDetector::box3D& outBox,
+        joDetector::box3D& outBox,
         std::vector<Eigen::Vector3d>& outCluster,
         Eigen::Vector3d& center,
         Eigen::Vector3d& stddev)
@@ -3429,28 +3429,28 @@ namespace onboardDetector{
         //           << ", pcClusterStdsVisual_ size = " << this->pcClusterStdsVisual_.size()
         //           << ", lidarBBoxes_ size = " << this->lidarBBoxes_.size() << std::endl;
 
-        std::vector<onboardDetector::box3D> filteredBBoxesTemp;
+        std::vector<joDetector::box3D> filteredBBoxesTemp;
         std::vector<std::vector<Eigen::Vector3d>> filteredPcClustersTemp;
         std::vector<Eigen::Vector3d> filteredPcClusterCentersTemp;
         std::vector<Eigen::Vector3d> filteredPcClusterStdsTemp; 
 
-        std::vector<onboardDetector::box3D> visualBBoxesTemp;
+        std::vector<joDetector::box3D> visualBBoxesTemp;
         std::vector<std::vector<Eigen::Vector3d>> visualPcClustersTemp;
         std::vector<Eigen::Vector3d> visualPcClusterCentersTemp;
         std::vector<Eigen::Vector3d> visualPcClusterStdsTemp; // store visual output
 
-        std::vector<onboardDetector::box3D> lidarBBoxesTemp;
+        std::vector<joDetector::box3D> lidarBBoxesTemp;
         std::vector<std::vector<Eigen::Vector3d>> lidarPcClustersTemp;
         std::vector<Eigen::Vector3d> lidarPcClusterCentersTemp;
         std::vector<Eigen::Vector3d> lidarPcClusterStdsTemp; // store lidar output
 
         auto removeOversizedBoxes = [this](
-            std::vector<onboardDetector::box3D>& boxes,
+            std::vector<joDetector::box3D>& boxes,
             std::vector<std::vector<Eigen::Vector3d>>& clusters,
             std::vector<Eigen::Vector3d>& centers,
             std::vector<Eigen::Vector3d>& stds)
         {
-            std::vector<onboardDetector::box3D> keptBoxes;
+            std::vector<joDetector::box3D> keptBoxes;
             std::vector<std::vector<Eigen::Vector3d>> keptClusters;
             std::vector<Eigen::Vector3d> keptCenters;
             std::vector<Eigen::Vector3d> keptStds;
@@ -3478,12 +3478,12 @@ namespace onboardDetector{
         // =========================
         // STEP 0: MERGE NESTED UV + DB (INTRA-GROUP)
         // =========================
-        std::vector<onboardDetector::box3D> uvBBoxesFiltered;
+        std::vector<joDetector::box3D> uvBBoxesFiltered;
         std::vector<std::vector<Eigen::Vector3d>> uvPcClustersFiltered;
         std::vector<Eigen::Vector3d> uvPcClusterCentersFiltered;
         std::vector<Eigen::Vector3d> uvPcClusterStdsFiltered;
 
-        std::vector<onboardDetector::box3D> dbBBoxesFiltered;
+        std::vector<joDetector::box3D> dbBBoxesFiltered;
         std::vector<std::vector<Eigen::Vector3d>> dbPcClustersFiltered;
         std::vector<Eigen::Vector3d> dbPcClusterCentersFiltered;
         std::vector<Eigen::Vector3d> dbPcClusterStdsFiltered;
@@ -3593,10 +3593,10 @@ namespace onboardDetector{
         // STEP 2: Get lidar bboxes and its corresponding clusters and features
         // lidar bbox filter
         for (size_t i = 0; i < this->lidarBBoxes_.size(); ++i) {
-            onboardDetector::box3D lidarBBox = this->lidarBBoxes_[i];
+            joDetector::box3D lidarBBox = this->lidarBBoxes_[i];
             
             // get corresponding point cloud cluster
-            onboardDetector::Cluster cluster = this->lidarClusters_[i];
+            joDetector::Cluster cluster = this->lidarClusters_[i];
 
             std::vector<Eigen::Vector3d> pcCluster;
             for (const pcl::PointXYZ& point : cluster.points->points) {
@@ -3618,7 +3618,7 @@ namespace onboardDetector{
         // =========================
         // STEP 2.5: MERGE NESTED LIDAR
         // =========================
-        std::vector<onboardDetector::box3D> lidarBBoxesFiltered;
+        std::vector<joDetector::box3D> lidarBBoxesFiltered;
         std::vector<std::vector<Eigen::Vector3d>> lidarPcClustersFiltered;
         std::vector<Eigen::Vector3d> lidarPcClusterCentersFiltered;
         std::vector<Eigen::Vector3d> lidarPcClusterStdsFiltered;
@@ -3677,7 +3677,7 @@ namespace onboardDetector{
         // Uses the same samegroupIOU / samegroupIOV thresholds.
         // =========================
         if (this->finalMergeFlag_){
-            std::vector<onboardDetector::box3D> finalMergedBBoxes;
+            std::vector<joDetector::box3D> finalMergedBBoxes;
             std::vector<std::vector<Eigen::Vector3d>> finalMergedClusters;
             std::vector<Eigen::Vector3d> finalMergedCenters;
             std::vector<Eigen::Vector3d> finalMergedStds;
@@ -3826,7 +3826,7 @@ namespace onboardDetector{
                 // when the whole YOLO ROI has no useful depth and per-box when only a few
                 // YOLO depth points fall inside a candidate 3D box.
                 // Multiple 3D bboxes can match the same YOLO detection.
-                auto computeProjectedYoloIou = [&](const onboardDetector::box3D& bb3d) -> double {
+                auto computeProjectedYoloIou = [&](const joDetector::box3D& bb3d) -> double {
                     const double hx3 = bb3d.x_width * 0.5;
                     const double hy3 = bb3d.y_width * 0.5;
                     const double hz3 = bb3d.z_width * 0.5;
@@ -4083,10 +4083,10 @@ namespace onboardDetector{
     }
 
 
-    void dynamicDetector::transformUVBBoxes(std::vector<onboardDetector::box3D>& bboxes){
+    void dynamicDetector::transformUVBBoxes(std::vector<joDetector::box3D>& bboxes){
         bboxes.clear();
         for(size_t i = 0; i < this->uvDetector_->box3Ds.size(); ++i){
-            onboardDetector::box3D bbox;
+            joDetector::box3D bbox;
             double x = this->uvDetector_->box3Ds[i].x; 
             double y = this->uvDetector_->box3Ds[i].y;
             double z = this->uvDetector_->box3Ds[i].z;
@@ -4177,7 +4177,7 @@ namespace onboardDetector{
 
     void dynamicDetector::clusterPointsAndBBoxes(
         const std::vector<Eigen::Vector3d>& points,
-        std::vector<onboardDetector::box3D>& bboxes,
+        std::vector<joDetector::box3D>& bboxes,
         std::vector<std::vector<Eigen::Vector3d>>& pcClusters,
         std::vector<Eigen::Vector3d>& pcClusterCenters,
         std::vector<Eigen::Vector3d>& pcClusterStds)
@@ -4188,7 +4188,7 @@ namespace onboardDetector{
         pcClusterStds.clear();
 
 
-        std::vector<onboardDetector::Point> pointsDB;
+        std::vector<joDetector::Point> pointsDB;
         this->eigenToDBPointVec(points, pointsDB, points.size());
         this->dbCluster_.reset(new DBSCAN(
             this->dbMinPointsCluster_,
@@ -4211,11 +4211,11 @@ namespace onboardDetector{
 
         if (this->visualDbscanRefinementEnable_) {
             // Use refined clusters with AABB
-            std::vector<onboardDetector::ClusterRefined> refinedClusters;
+            std::vector<joDetector::ClusterRefined> refinedClusters;
             this->dbCluster_->getRefinedClustersWithAABB(refinedClusters);
             for (size_t i = 0; i < refinedClusters.size(); ++i) {
                 const auto& ref = refinedClusters[i];
-                onboardDetector::box3D box;
+                joDetector::box3D box;
                 box.id = static_cast<int>(i);
                 box.x = (ref.box.min_pt(0) + ref.box.max_pt(0)) / 2.0;
                 box.y = (ref.box.min_pt(1) + ref.box.max_pt(1)) / 2.0;
@@ -4239,7 +4239,7 @@ namespace onboardDetector{
             // Use raw clusters as before
             int clusterNum = 0;
             for (size_t i = 0; i < this->dbCluster_->m_points.size(); ++i) {
-                onboardDetector::Point pDB = this->dbCluster_->m_points[i];
+                joDetector::Point pDB = this->dbCluster_->m_points[i];
                 if (pDB.clusterID > clusterNum) {
                     clusterNum = pDB.clusterID;
                 }
@@ -4249,7 +4249,7 @@ namespace onboardDetector{
             pcClustersTemp.resize(clusterNum);
 
             for (size_t i = 0; i < this->dbCluster_->m_points.size(); ++i) {
-                onboardDetector::Point pDB = this->dbCluster_->m_points[i];
+                joDetector::Point pDB = this->dbCluster_->m_points[i];
                 if (pDB.clusterID > 0) {
                     Eigen::Vector3d p = this->dbPointToEigen(pDB);
                     pcClustersTemp[pDB.clusterID - 1].push_back(p);
@@ -4257,7 +4257,7 @@ namespace onboardDetector{
             }
 
             for (size_t i = 0; i < pcClustersTemp.size(); ++i) {
-                onboardDetector::box3D box;
+                joDetector::box3D box;
                 double xmin = pcClustersTemp[i][0](0);
                 double ymin = pcClustersTemp[i][0](1);
                 double zmin = pcClustersTemp[i][0](2);
@@ -4366,8 +4366,8 @@ namespace onboardDetector{
     }
 
 
-    double dynamicDetector::calBoxIOU(const onboardDetector::box3D& box1,
-                                    const onboardDetector::box3D& box2,
+    double dynamicDetector::calBoxIOU(const joDetector::box3D& box1,
+                                    const joDetector::box3D& box2,
                                     bool ignoreZmin)
     {
         // Sanity check input
@@ -4461,8 +4461,8 @@ namespace onboardDetector{
         return std::max(0.0, std::min(1.0, iou));
     }
 
-    double dynamicDetector::calBoxIOV(const onboardDetector::box3D& box1,
-                                    const onboardDetector::box3D& box2,
+    double dynamicDetector::calBoxIOV(const joDetector::box3D& box1,
+                                    const joDetector::box3D& box2,
                                     bool ignoreZmin)
     {
         // Sanity check input
@@ -4547,8 +4547,8 @@ namespace onboardDetector{
         return std::max(0.0, std::min(1.0, iov));
     }
 
-    double dynamicDetector::computeBoxIoU2D(const onboardDetector::box3D& boxA,
-                                            const onboardDetector::box3D& boxB) const
+    double dynamicDetector::computeBoxIoU2D(const joDetector::box3D& boxA,
+                                            const joDetector::box3D& boxB) const
     {
         double axMin = boxA.x - 0.5 * boxA.x_width;
         double axMax = boxA.x + 0.5 * boxA.x_width;
@@ -4576,7 +4576,7 @@ namespace onboardDetector{
     } 
 
     bool dynamicDetector::isNaturalMotion(int trackIdx,
-                                        const onboardDetector::box3D& currDetectedBBox) const
+                                        const joDetector::box3D& currDetectedBBox) const
     {
         if (trackIdx < 0 || trackIdx >= static_cast<int>(this->boxHist_.size())){
             return false;
@@ -4586,7 +4586,7 @@ namespace onboardDetector{
             return false;
         }
 
-        const onboardDetector::box3D& prevBBox = this->boxHist_[trackIdx].front();
+        const joDetector::box3D& prevBBox = this->boxHist_[trackIdx].front();
 
         const Eigen::Vector3d bboxPos(currDetectedBBox.x, currDetectedBBox.y, currDetectedBBox.z);
         const bool outsideFov = !this->isInCameraFOV(bboxPos);
@@ -4608,7 +4608,7 @@ namespace onboardDetector{
             return false;
         }
 
-        onboardDetector::kalman_filter predictedFilter = this->filters_[trackIdx];
+        joDetector::kalman_filter predictedFilter = this->filters_[trackIdx];
         predictedFilter.predict(MatrixXd::Zero(6,1));
 
         const double predX = predictedFilter.output(0);
@@ -4628,7 +4628,7 @@ namespace onboardDetector{
     }
 
     double dynamicDetector::computeVelocityDirectionError(int trackIdx,
-                                                        const onboardDetector::box3D& currDetectedBBox) const
+                                                        const joDetector::box3D& currDetectedBBox) const
     {
         if (trackIdx < 0 || trackIdx >= static_cast<int>(this->boxHist_.size())){
             return std::numeric_limits<double>::infinity();
@@ -4638,13 +4638,13 @@ namespace onboardDetector{
             return std::numeric_limits<double>::infinity();
         }
 
-        const onboardDetector::box3D& prevBBox = this->boxHist_[trackIdx].front();
+        const joDetector::box3D& prevBBox = this->boxHist_[trackIdx].front();
         const double dt = this->clampPositive(this->dt_, 1e-3);
 
         const double obsVx = (currDetectedBBox.x - prevBBox.x) / dt;
         const double obsVy = (currDetectedBBox.y - prevBBox.y) / dt;
 
-        onboardDetector::kalman_filter predictedFilter = this->filters_[trackIdx];
+        joDetector::kalman_filter predictedFilter = this->filters_[trackIdx];
         predictedFilter.predict(MatrixXd::Zero(6,1));
 
         const double predVx = predictedFilter.output(2);
@@ -4683,7 +4683,7 @@ namespace onboardDetector{
     }
 
     bool dynamicDetector::passesVelocityDirectionGate(int trackIdx,
-                                                    const onboardDetector::box3D& currDetectedBBox,
+                                                    const joDetector::box3D& currDetectedBBox,
                                                     bool alreadyConfirmed,
                                                     bool yoloExempt) const
     {
@@ -4695,14 +4695,14 @@ namespace onboardDetector{
             return false;
         }
 
-        const onboardDetector::box3D& prevBBox = this->boxHist_[trackIdx].front();
+        const joDetector::box3D& prevBBox = this->boxHist_[trackIdx].front();
         const double dt = this->clampPositive(this->dt_, 1e-3);
 
         const double obsVx = (currDetectedBBox.x - prevBBox.x) / dt;
         const double obsVy = (currDetectedBBox.y - prevBBox.y) / dt;
         const double obsSpeed = std::sqrt(obsVx * obsVx + obsVy * obsVy);
 
-        onboardDetector::kalman_filter predictedFilter = this->filters_[trackIdx];
+        joDetector::kalman_filter predictedFilter = this->filters_[trackIdx];
         predictedFilter.predict(MatrixXd::Zero(6,1));
 
         const double predVx = predictedFilter.output(2);
@@ -4737,10 +4737,10 @@ namespace onboardDetector{
             // per track confermate LiDAR-only fuori FOV, non perdiamo subito la track
             // se la persona cambia direzione e la detection resta spazialmente plausibile.
             if (outsideFov){
-                onboardDetector::kalman_filter predictedFilterTurn = this->filters_[trackIdx];
+                joDetector::kalman_filter predictedFilterTurn = this->filters_[trackIdx];
                 predictedFilterTurn.predict(MatrixXd::Zero(6,1));
 
-                onboardDetector::box3D predictedBox = this->boxHist_[trackIdx][0];
+                joDetector::box3D predictedBox = this->boxHist_[trackIdx][0];
                 predictedBox.x  = predictedFilterTurn.output(0);
                 predictedBox.y  = predictedFilterTurn.output(1);
                 predictedBox.Vx = predictedFilterTurn.output(2);
@@ -4776,7 +4776,7 @@ namespace onboardDetector{
     }
 
     double dynamicDetector::getAdaptiveMaxInnovation(int trackIdx,
-                                                    const onboardDetector::box3D& currDetectedBBox) const
+                                                    const joDetector::box3D& currDetectedBBox) const
     {
         if (currDetectedBBox.is_yolo_candidate){
             return this->maxNaturalInnovationDynamic_;
@@ -4795,7 +4795,7 @@ namespace onboardDetector{
     }
 
     double dynamicDetector::getAdaptiveMinMatchScore(int trackIdx,
-                                                    const onboardDetector::box3D& currentBox) const
+                                                    const joDetector::box3D& currentBox) const
     {
         if (currentBox.is_yolo_candidate){
             return this->minMatchScoreDynamic_;
@@ -4809,7 +4809,7 @@ namespace onboardDetector{
     }
 
     double dynamicDetector::computeObservedSpeedOverWindow(int trackIdx,
-                                                        const onboardDetector::box3D& currDetectedBBox,
+                                                        const joDetector::box3D& currDetectedBBox,
                                                         int window) const
     {
         if (trackIdx < 0 ||
@@ -4822,7 +4822,7 @@ namespace onboardDetector{
         const int histSize = static_cast<int>(this->boxHist_[trackIdx].size());
         const int k = std::max(1, std::min(window, histSize));
 
-        const onboardDetector::box3D& pastBBox = this->boxHist_[trackIdx][k - 1];
+        const joDetector::box3D& pastBBox = this->boxHist_[trackIdx][k - 1];
 
         const double dx = currDetectedBBox.x - pastBBox.x;
         const double dy = currDetectedBBox.y - pastBBox.y;
@@ -4832,8 +4832,8 @@ namespace onboardDetector{
     }
 
     bool dynamicDetector::isLidarOnlyOutsideFovAssociation(
-        const onboardDetector::box3D& predictedBox,
-        const onboardDetector::box3D& currentBox) const
+        const joDetector::box3D& predictedBox,
+        const joDetector::box3D& currentBox) const
     {
         const Eigen::Vector3d predPos(predictedBox.x, predictedBox.y, predictedBox.z);
         const Eigen::Vector3d currPos(currentBox.x, currentBox.y, currentBox.z);
@@ -4855,7 +4855,7 @@ namespace onboardDetector{
     }
 
     bool dynamicDetector::shouldConfirmTrack(int trackIdx,
-                                            const onboardDetector::box3D& currDetectedBBox,
+                                            const joDetector::box3D& currDetectedBBox,
                                             int newHitStreak) const
     {
         const bool historyHasYolo =
@@ -4941,8 +4941,8 @@ namespace onboardDetector{
 
     bool dynamicDetector::isAbruptTurnAllowedOutsideFov(
         int trackIdx,
-        const onboardDetector::box3D& predictedBox,
-        const onboardDetector::box3D& currentBox,
+        const joDetector::box3D& predictedBox,
+        const joDetector::box3D& currentBox,
         double dt) const
     {
         if (trackIdx < 0 ||
@@ -4983,7 +4983,7 @@ namespace onboardDetector{
 
         dt = this->clampPositive(dt, 1e-3);
 
-        const onboardDetector::box3D& prevBox = this->boxHist_[trackIdx].front();
+        const joDetector::box3D& prevBox = this->boxHist_[trackIdx].front();
 
         const double dxObs = currentBox.x - prevBox.x;
         const double dyObs = currentBox.y - prevBox.y;
@@ -5143,7 +5143,7 @@ namespace onboardDetector{
                 MatrixXd states, A, B, H, P, Q, R;
                 this->kalmanFilterMatrixAccV2(this->filteredBBoxes_[i], states, A, B, H, P, Q, R);
 
-                onboardDetector::kalman_filter newFilter;
+                joDetector::kalman_filter newFilter;
                 newFilter.setup(states, A, B, H, P, Q, R);
                 this->filters_.push_back(newFilter);
 
@@ -5166,9 +5166,9 @@ namespace onboardDetector{
 
     void dynamicDetector::boxAssociationHelper(std::vector<int>& bestMatch)
     {
-        std::vector<onboardDetector::box3D> predictedBBoxes;
+        std::vector<joDetector::box3D> predictedBBoxes;
         std::vector<Eigen::Vector3d> predictedPcCenters;
-        std::vector<onboardDetector::box3D> previousObservedBBoxes;
+        std::vector<joDetector::box3D> previousObservedBBoxes;
 
         this->getPredictedBBoxesFromFilters(predictedBBoxes, predictedPcCenters);
 
@@ -5177,7 +5177,7 @@ namespace onboardDetector{
         this->findBestMatch(predictedBBoxes, previousObservedBBoxes, bestMatch);
     }
 
-    void dynamicDetector::getPreviousObservedBBoxes(std::vector<onboardDetector::box3D>& previousObservedBBoxes) const
+    void dynamicDetector::getPreviousObservedBBoxes(std::vector<joDetector::box3D>& previousObservedBBoxes) const
     {
         previousObservedBBoxes.clear();
         previousObservedBBoxes.reserve(this->boxHist_.size());
@@ -5190,28 +5190,28 @@ namespace onboardDetector{
         }
     }
 
-    void dynamicDetector::findBestMatch(const std::vector<onboardDetector::box3D>& predictedBBoxes,
-                                        const std::vector<onboardDetector::box3D>& previousObservedBBoxes,
+    void dynamicDetector::findBestMatch(const std::vector<joDetector::box3D>& predictedBBoxes,
+                                        const std::vector<joDetector::box3D>& previousObservedBBoxes,
                                         std::vector<int>& bestMatch)
     {
         const int numObjs = static_cast<int>(this->filteredBBoxes_.size());
         bestMatch.assign(numObjs, -1);
 
-        std::vector<onboardDetector::matchCandidate> candidates;
+        std::vector<joDetector::matchCandidate> candidates;
         candidates.reserve(numObjs * std::max<size_t>(1, predictedBBoxes.size()));
 
         const double dt = this->clampPositive(this->dt_, 1e-3);
 
         for (int i = 0; i < numObjs; ++i){
-            const onboardDetector::box3D& currBBox = this->filteredBBoxes_[i];
+            const joDetector::box3D& currBBox = this->filteredBBoxes_[i];
 
             for (size_t j = 0; j < predictedBBoxes.size(); ++j){
                 if (j >= previousObservedBBoxes.size()){
                     continue;
                 }
 
-                const onboardDetector::box3D& predBBox = predictedBBoxes[j];
-                const onboardDetector::box3D& prevObsBBox = previousObservedBBoxes[j];
+                const joDetector::box3D& predBBox = predictedBBoxes[j];
+                const joDetector::box3D& prevObsBBox = previousObservedBBoxes[j];
 
                 double predPosDist = 0.0;
                 double requiredSpeed = 0.0;
@@ -5274,7 +5274,7 @@ namespace onboardDetector{
                         score);
                 }
 
-                onboardDetector::matchCandidate candidate;
+                joDetector::matchCandidate candidate;
                 candidate.currIdx = i;
                 candidate.prevIdx = static_cast<int>(j);
                 candidate.score = score;
@@ -5283,7 +5283,7 @@ namespace onboardDetector{
         }
 
         std::sort(candidates.begin(), candidates.end(),
-                [](const onboardDetector::matchCandidate& a, const onboardDetector::matchCandidate& b){
+                [](const joDetector::matchCandidate& a, const joDetector::matchCandidate& b){
                     if (a.currIdx == b.currIdx){
                         return a.score > b.score;
                     }
@@ -5314,12 +5314,12 @@ namespace onboardDetector{
     }
 
     void dynamicDetector::kalmanFilterAndUpdateHist(const std::vector<int>& bestMatch){
-        std::vector<std::deque<onboardDetector::box3D>> boxHistTemp;
+        std::vector<std::deque<joDetector::box3D>> boxHistTemp;
         std::vector<std::deque<std::vector<Eigen::Vector3d>>> pcHistTemp;
         std::vector<std::deque<Eigen::Vector3d>> pcCenterHistTemp;
-        std::vector<onboardDetector::kalman_filter> filtersTemp;
+        std::vector<joDetector::kalman_filter> filtersTemp;
         std::vector<int> missedFramesTemp;
-        std::vector<onboardDetector::box3D> trackedBBoxesTemp;
+        std::vector<joDetector::box3D> trackedBBoxesTemp;
 
         std::vector<int> hitStreakTemp;
         std::vector<int> trackAgeTemp;
@@ -5330,10 +5330,10 @@ namespace onboardDetector{
         std::vector<double> yoloYWidthTemp;
         std::vector<int> yoloBaseMismatchStreakTemp;
 
-        std::deque<onboardDetector::box3D> newSingleBoxHist;
+        std::deque<joDetector::box3D> newSingleBoxHist;
         std::deque<std::vector<Eigen::Vector3d>> newSinglePcHist;
         std::deque<Eigen::Vector3d> newSinglePcCenterHist;
-        onboardDetector::kalman_filter newFilter;
+        joDetector::kalman_filter newFilter;
 
         int numObjs = static_cast<int>(this->filteredBBoxes_.size());
         int prevTracks = static_cast<int>(this->boxHist_.size());
@@ -5355,8 +5355,8 @@ namespace onboardDetector{
             filtersTemp.push_back(this->filters_[matchIdx]);
             missedFramesTemp.push_back(0);
 
-            onboardDetector::box3D currDetectedBBox = this->filteredBBoxes_[i];
-            onboardDetector::box3D newEstimatedBBox;
+            joDetector::box3D currDetectedBBox = this->filteredBBoxes_[i];
+            joDetector::box3D newEstimatedBBox;
 
             Eigen::MatrixXd Z;
             this->getKalmanObservationAccV2(currDetectedBBox, Z);
@@ -5498,7 +5498,7 @@ namespace onboardDetector{
                     // is_yolo_candidate is taken from newEstimatedBBox (track-level sticky).
                     // is_dynamic: use previous frame's classification result (1-frame delay)
                     // since classificationCB runs after tracking.
-                    onboardDetector::box3D outputBBox = currDetectedBBox;
+                    joDetector::box3D outputBBox = currDetectedBBox;
                     outputBBox.Vx               = newEstimatedBBox.Vx;
                     outputBBox.Vy               = newEstimatedBBox.Vy;
                     outputBBox.Ax               = newEstimatedBBox.Ax;
@@ -5552,14 +5552,14 @@ namespace onboardDetector{
                 continue;
             }
 
-            std::deque<onboardDetector::box3D> hist = this->boxHist_[j];
+            std::deque<joDetector::box3D> hist = this->boxHist_[j];
             std::deque<std::vector<Eigen::Vector3d>> pcHist = this->pcHist_[j];
             std::deque<Eigen::Vector3d> pcCenterHist = this->pcCenterHist_[j];
-            onboardDetector::kalman_filter filter = this->filters_[j];
+            joDetector::kalman_filter filter = this->filters_[j];
 
             filter.predict(MatrixXd::Zero(6,1));
 
-            onboardDetector::box3D predictedBBox = hist.front();
+            joDetector::box3D predictedBBox = hist.front();
             predictedBBox.x = filter.output(0);
             predictedBBox.y = filter.output(1);
             predictedBBox.Vx = filter.output(2);
@@ -5641,7 +5641,7 @@ namespace onboardDetector{
                 continue;
             }
 
-            const onboardDetector::box3D& currDetectedBBox = this->filteredBBoxes_[i];
+            const joDetector::box3D& currDetectedBBox = this->filteredBBoxes_[i];
             const Eigen::Vector3d& currPcCenter = this->filteredPcClusterCenters_[i];
 
             if (this->isCloseToExistingTrack(currDetectedBBox, currPcCenter, prevMatched)){
@@ -5664,7 +5664,7 @@ namespace onboardDetector{
             pcHistTemp.push_back(newSinglePcHist);
             pcCenterHistTemp.push_back(newSinglePcCenterHist);
 
-            onboardDetector::box3D newEstimatedBBox = currDetectedBBox;
+            joDetector::box3D newEstimatedBBox = currDetectedBBox;
 
             Eigen::MatrixXd states, A, B, H, P, Q, R;
             this->kalmanFilterMatrixAccV2(currDetectedBBox, states, A, B, H, P, Q, R);
@@ -5700,7 +5700,7 @@ namespace onboardDetector{
             confirmedTracksTemp.push_back(immediateConfirm);
 
             if (immediateConfirm){
-                onboardDetector::box3D outputBBox = currDetectedBBox;
+                joDetector::box3D outputBBox = currDetectedBBox;
                 outputBBox.id        = newEstimatedBBox.id;
                 outputBBox.track_age = 1;
                 trackedBBoxesTemp.push_back(outputBBox);
@@ -5752,7 +5752,7 @@ namespace onboardDetector{
     // as direct observations.
     // ============================================================================
 
-    void dynamicDetector::kalmanFilterMatrixAccV2(const onboardDetector::box3D& currDetectedBBox,
+    void dynamicDetector::kalmanFilterMatrixAccV2(const joDetector::box3D& currDetectedBBox,
                                                   MatrixXd& states,
                                                   MatrixXd& A,
                                                   MatrixXd& B,
@@ -5803,7 +5803,7 @@ namespace onboardDetector{
         R(1, 1) = this->eRPos_v2_;
     }
 
-    void dynamicDetector::getKalmanObservationAccV2(const onboardDetector::box3D& currDetectedBBox,
+    void dynamicDetector::getKalmanObservationAccV2(const joDetector::box3D& currDetectedBBox,
                                                      MatrixXd& Z)
     {
         Z = MatrixXd::Zero(2, 1);
@@ -5811,7 +5811,7 @@ namespace onboardDetector{
         Z(1) = currDetectedBBox.y;
     }
 
-    void dynamicDetector::getPredictedBBoxesFromFilters(std::vector<onboardDetector::box3D>& propedBBoxes,
+    void dynamicDetector::getPredictedBBoxesFromFilters(std::vector<joDetector::box3D>& propedBBoxes,
                                                         std::vector<Eigen::Vector3d>& propedPcCenters){
         propedBBoxes.clear();
         propedPcCenters.clear();
@@ -5821,10 +5821,10 @@ namespace onboardDetector{
                 continue;
             }
 
-            onboardDetector::kalman_filter predictedFilter = this->filters_[i];
+            joDetector::kalman_filter predictedFilter = this->filters_[i];
             predictedFilter.predict(MatrixXd::Zero(6,1));
 
-            onboardDetector::box3D predBBox = this->boxHist_[i][0];
+            joDetector::box3D predBBox = this->boxHist_[i][0];
             predBBox.x = predictedFilter.output(0);
             predBBox.y = predictedFilter.output(1);
             predBBox.Vx = predictedFilter.output(2);
@@ -5856,11 +5856,11 @@ namespace onboardDetector{
             const bool confirmed = (i < this->confirmedTracks_.size()) && this->confirmedTracks_[i];
             const int missed = (i < this->missedFrames_.size()) ? this->missedFrames_[i] : 0;
 
-            onboardDetector::kalman_filter predictedFilter = this->filters_[i];
+            joDetector::kalman_filter predictedFilter = this->filters_[i];
             for (int step = 0; step < numSteps; ++step){
                 predictedFilter.predict(MatrixXd::Zero(6,1));
 
-                onboardDetector::box3D predBBox = this->boxHist_[i][0];
+                joDetector::box3D predBBox = this->boxHist_[i][0];
                 predBBox.x = predictedFilter.output(0);
                 predBBox.y = predictedFilter.output(1);
                 predBBox.Vx = predictedFilter.output(2);
@@ -5881,7 +5881,7 @@ namespace onboardDetector{
         }
     }
     
-    bool dynamicDetector::isCloseToExistingTrack(const onboardDetector::box3D& currDetectedBBox,
+    bool dynamicDetector::isCloseToExistingTrack(const joDetector::box3D& currDetectedBBox,
                                                 const Eigen::Vector3d& currPcCenter,
                                                 const std::vector<bool>& prevMatched)
     {
@@ -5893,10 +5893,10 @@ namespace onboardDetector{
                 continue;
             }
 
-            onboardDetector::kalman_filter predictedFilter = this->filters_[j];
+            joDetector::kalman_filter predictedFilter = this->filters_[j];
             predictedFilter.predict(MatrixXd::Zero(6,1));
 
-            onboardDetector::box3D predictedBox = this->boxHist_[j][0];
+            joDetector::box3D predictedBox = this->boxHist_[j][0];
             predictedBox.x = predictedFilter.output(0);
             predictedBox.y = predictedFilter.output(1);
             predictedBox.Vx = predictedFilter.output(2);
@@ -5942,8 +5942,8 @@ namespace onboardDetector{
         return false;
     }
 
-    bool dynamicDetector::isDetectionDuplicateOfPrediction(const onboardDetector::box3D& currDetectedBBox,
-                                                        const onboardDetector::box3D& predictedBox,
+    bool dynamicDetector::isDetectionDuplicateOfPrediction(const joDetector::box3D& currDetectedBBox,
+                                                        const joDetector::box3D& predictedBox,
                                                         double& centerDist,
                                                         double& iou2d,
                                                         double& relSizeDiff) const
@@ -5963,8 +5963,8 @@ namespace onboardDetector{
         return duplicateByStrongOverlap;
     }
 
-    double dynamicDetector::computeRelativeSizeDiff(const onboardDetector::box3D& a,
-                                                    const onboardDetector::box3D& b) const
+    double dynamicDetector::computeRelativeSizeDiff(const joDetector::box3D& a,
+                                                    const joDetector::box3D& b) const
     {
         const double eps = 1e-6;
 
@@ -5975,8 +5975,8 @@ namespace onboardDetector{
         return (dx + dy + dz) / 3.0;
     }
 
-    bool dynamicDetector::areBoxesDuplicate2D(const onboardDetector::box3D& a,
-                                            const onboardDetector::box3D& b) const
+    bool dynamicDetector::areBoxesDuplicate2D(const joDetector::box3D& a,
+                                            const joDetector::box3D& b) const
     {
         double dx = a.x - b.x;
         double dy = a.y - b.y;
@@ -5996,8 +5996,8 @@ namespace onboardDetector{
     }
 
     bool dynamicDetector::isDuplicateOfTrackedThisFrame(
-        const onboardDetector::box3D& currDetectedBBox,
-        const std::vector<onboardDetector::box3D>& trackedBBoxesTemp,
+        const joDetector::box3D& currDetectedBBox,
+        const std::vector<joDetector::box3D>& trackedBBoxesTemp,
         int& duplicateTrackId) const
     {
         duplicateTrackId = -1;
@@ -6017,9 +6017,9 @@ namespace onboardDetector{
         return (value < minValue) ? minValue : value;
     }
 
-    double dynamicDetector::computeAssociationScore(const onboardDetector::box3D& predictedBox,
-                                                    const onboardDetector::box3D& previousObservedBox,
-                                                    const onboardDetector::box3D& currentBox,
+    double dynamicDetector::computeAssociationScore(const joDetector::box3D& predictedBox,
+                                                    const joDetector::box3D& previousObservedBox,
+                                                    const joDetector::box3D& currentBox,
                                                     double dt,
                                                     double& predPosDist,
                                                     double& requiredSpeed,
@@ -6251,7 +6251,7 @@ namespace onboardDetector{
         return false;
     }
 
-    void dynamicDetector::assignMatchesGlobally(const std::vector<onboardDetector::matchCandidate>& candidates,
+    void dynamicDetector::assignMatchesGlobally(const std::vector<joDetector::matchCandidate>& candidates,
                                                 int numCurr,
                                                 int numPrev,
                                                 std::vector<int>& bestMatch) const
@@ -6464,8 +6464,8 @@ namespace onboardDetector{
             traj.pose.orientation.z = 0.0;
             for (size_t j=0; j<this->boxHist_[i].size()-1; ++j){
                 geometry_msgs::msg::Point p1, p2;
-                onboardDetector::box3D box1 = this->boxHist_[i][j];
-                onboardDetector::box3D box2 = this->boxHist_[i][j+1];
+                joDetector::box3D box1 = this->boxHist_[i][j];
+                joDetector::box3D box2 = this->boxHist_[i][j+1];
                 p1.x = box1.x; p1.y = box1.y; p1.z = box1.z;
                 p2.x = box2.x; p2.y = box2.y; p2.z = box2.z;
                 traj.points.push_back(p1);
@@ -6514,7 +6514,7 @@ namespace onboardDetector{
         sensor_msgs::msg::PointCloud2 lidarClustersMsg;
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
         for (size_t i=0; i<this->lidarClusters_.size(); ++i){
-            onboardDetector::Cluster & cluster = this->lidarClusters_[i];
+            joDetector::Cluster & cluster = this->lidarClusters_[i];
 
             std_msgs::msg::ColorRGBA color;
             srand(cluster.cluster_id);
@@ -6687,10 +6687,10 @@ namespace onboardDetector{
     }
 
     // user functions
-    void dynamicDetector::getDynamicObstacles(std::vector<onboardDetector::box3D>& incomeDynamicBBoxes, const Eigen::Vector3d &robotSize){
+    void dynamicDetector::getDynamicObstacles(std::vector<joDetector::box3D>& incomeDynamicBBoxes, const Eigen::Vector3d &robotSize){
         incomeDynamicBBoxes.clear();
         for (int i=0; i<int(this->dynamicBBoxes_.size()); i++){
-            onboardDetector::box3D box = this->dynamicBBoxes_[i];
+            joDetector::box3D box = this->dynamicBBoxes_[i];
             box.x_width += robotSize(0);
             box.y_width += robotSize(1);
             box.z_width += robotSize(2);

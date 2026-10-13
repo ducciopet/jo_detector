@@ -28,20 +28,20 @@ public:
         
         // Load camera intrinsics from config
         std::vector<double> depth_intrinsics_vec = this->declare_parameter(
-            "onboard_detector.depth_intrinsics", 
+            "jo_detector.depth_intrinsics", 
             std::vector<double>{645.0, 644.3, 653.9, 365.6});
         
         double depth_scale = this->declare_parameter(
-            "onboard_detector.depth_scale_factor", 1000.0);
+            "jo_detector.depth_scale_factor", 1000.0);
         
         double depth_min = this->declare_parameter(
-            "onboard_detector.depth_min_value", 0.5);
+            "jo_detector.depth_min_value", 0.5);
         
         double depth_max = this->declare_parameter(
-            "onboard_detector.depth_max_value", 5.0);
+            "jo_detector.depth_max_value", 5.0);
         
         int depth_skip = this->declare_parameter(
-            "onboard_detector.depth_skip_pixel", 2);
+            "jo_detector.depth_skip_pixel", 2);
         
         // Store camera intrinsics
         fx_ = depth_intrinsics_vec[0];

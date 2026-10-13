@@ -12,7 +12,7 @@
 using Eigen::MatrixXd;
 using namespace std;
 
-namespace onboardDetector{
+namespace joDetector{
     class kalman_filter
     {
         private:

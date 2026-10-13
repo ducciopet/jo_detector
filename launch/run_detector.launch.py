@@ -33,13 +33,13 @@ def generate_launch_description():
         description='Use simulation clock')
     use_sim_time = LaunchConfiguration('use_sim_time')
 
-    pkg_dir = get_package_share_directory('onboard_detector')
+    pkg_dir = get_package_share_directory('jo_detector')
     config_file = os.path.join(pkg_dir, 'cfg', 'detector_param_jo_zotac_outdoor.yaml')
     rviz_config_file = os.path.join(pkg_dir, 'rviz', 'detector_jo_zotac.rviz')
 
     calibration_params = _load_node_params(config_file, 'calibration_icp_node')
     detector_params = _load_node_params(config_file, 'detector_node')
-    detector_onboard_params = detector_params.get('onboard_detector', {}) if isinstance(detector_params, dict) else {}
+    detector_onboard_params = detector_params.get('jo_detector', {}) if isinstance(detector_params, dict) else {}
     camera_frame_initial_guess = str(calibration_params.get('camera_frame_initial_guess', 'camera_initial_guess'))
 
     odom_topic = str(detector_onboard_params.get('odom_topic', '/glim_ros/odom_corrected'))
@@ -81,7 +81,7 @@ def generate_launch_description():
     )
 
     calibration_node = Node(
-        package='onboard_detector',
+        package='jo_detector',
         executable='calibration_icp_node',
         name='calibration_icp_node',
         output='screen',
@@ -92,19 +92,19 @@ def generate_launch_description():
     )
 
     detector_node = Node(
-        package='onboard_detector',
+        package='jo_detector',
         executable='detector_node',
         name='detector_node',
         output='screen',
         parameters=[
             ParameterFile(config_file, allow_substs=True),
             {'use_sim_time': use_sim_time},
-            {'onboard_detector.odom_topic': odom_topic},
+            {'jo_detector.odom_topic': odom_topic},
         ],
     )
 
     yolo_node = Node(
-        package='onboard_detector',
+        package='jo_detector',
         executable='yolov11_detector_node.py',
         name='yolov11_detector_node',
         output='screen',
@@ -124,7 +124,7 @@ def generate_launch_description():
     )
 
     wall_detector_node = Node(
-        package='onboard_detector',
+        package='jo_detector',
         executable='wall_detector_node',
         name='wall_detector_node',
         output='screen',
@@ -135,7 +135,7 @@ def generate_launch_description():
     )
 
     odometry_tf_publisher_node = Node(
-        package='onboard_detector',
+        package='jo_detector',
         executable='odometry_tf_publisher_node',
         name='odometry_tf_publisher',
         output='screen',

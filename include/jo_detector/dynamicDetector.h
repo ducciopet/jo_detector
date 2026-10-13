@@ -3,8 +3,8 @@
     ---------------------------------
     header file of dynamic obstacle detector
 */
-#ifndef ONBOARDDETECTOR_DYNAMICDETECTOR_H
-#define ONBOARDDETECTOR_DYNAMICDETECTOR_H
+#ifndef JODETECTOR_DYNAMICDETECTOR_H
+#define JODETECTOR_DYNAMICDETECTOR_H
 
 #include <rclcpp/rclcpp.hpp>
 #include <Eigen/Eigen>
@@ -29,12 +29,12 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2/exceptions.h>
-#include <onboard_detector/dbscan.h>
-#include <onboard_detector/uvDetector.h>
-#include <onboard_detector/lidarDetector.h>
-#include <onboard_detector/kalmanFilter.h>
-#include <onboard_detector/utils.h>
-#include <onboard_detector/srv/get_dynamic_obstacles.hpp>
+#include <jo_detector/dbscan.h>
+#include <jo_detector/uvDetector.h>
+#include <jo_detector/lidarDetector.h>
+#include <jo_detector/kalmanFilter.h>
+#include <jo_detector/utils.h>
+#include <jo_detector/srv/get_dynamic_obstacles.hpp>
 #include <jo_msgs/msg/obstacle.hpp>
 #include <jo_msgs/msg/obstacle_array.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
@@ -43,7 +43,7 @@
 #include <thread>
 #include <unordered_set>
 
-namespace onboardDetector{
+namespace joDetector{
 
     class dynamicDetector{
 
@@ -108,7 +108,7 @@ namespace onboardDetector{
         // Stable, public-API republish of the same cloud as downSamplePointsPub_
         // (downSamplePointsPub_/"/downsampled_point_cloud" stays as-is for
         // backward compat / internal debug use). This is the one other
-        // packages should depend on: /onboard_detector/lidar/processed —
+        // packages should depend on: /jo_detector/lidar/processed —
         // range+ground/roof+wall-bbox filtered, voxel-downsampled, frame odom.
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr processedLidarPub_;
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr rawLidarPointsPub_;
@@ -116,12 +116,12 @@ namespace onboardDetector{
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr yoloPointsPub_;
         rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr historyTrajPub_;
         rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr velVisPub_;
-        rclcpp::Service<onboard_detector::srv::GetDynamicObstacles>::SharedPtr getDynamicObstacleServer_;
+        rclcpp::Service<jo_detector::srv::GetDynamicObstacles>::SharedPtr getDynamicObstacleServer_;
 
         // DETECTOR
-        std::shared_ptr<onboardDetector::UVdetector> uvDetector_;
-        std::shared_ptr<onboardDetector::DBSCAN> dbCluster_;
-        std::shared_ptr<onboardDetector::lidarDetector> lidarDetector_;
+        std::shared_ptr<joDetector::UVdetector> uvDetector_;
+        std::shared_ptr<joDetector::DBSCAN> dbCluster_;
+        std::shared_ptr<joDetector::lidarDetector> lidarDetector_;
 
         // SENSOR INFO
         // CAMERA DEPTH
@@ -354,38 +354,38 @@ namespace onboardDetector{
         //LIDAR DATA
         sensor_msgs::msg::PointCloud2::ConstSharedPtr latestCloud_;
         pcl::PointCloud<pcl::PointXYZ>::Ptr lidarCloud_ = nullptr; 
-        std::vector<onboardDetector::Cluster> lidarClusters_;
+        std::vector<joDetector::Cluster> lidarClusters_;
 
         // DETECTOR DATA
-        std::vector<onboardDetector::box3D> uvBBoxes_; // uv detector bounding boxes
+        std::vector<joDetector::box3D> uvBBoxes_; // uv detector bounding boxes
         int projPointsNum_ = 0;
         std::vector<Eigen::Vector3d> projPoints_; // projected points from depth image
         std::vector<double> pointsDepth_;
         std::vector<Eigen::Vector3d> filteredDepthPoints_; // filtered point cloud data
-        std::vector<onboardDetector::box3D> dbBBoxes_; // DBSCAN bounding boxes
+        std::vector<joDetector::box3D> dbBBoxes_; // DBSCAN bounding boxes
         std::vector<std::vector<Eigen::Vector3d>> pcClustersVisual_; // pointcloud clusters
         std::vector<Eigen::Vector3d> pcClusterCentersVisual_; // pointcloud cluster centers
         std::vector<Eigen::Vector3d> pcClusterStdsVisual_; // pointcloud cluster standard deviation in each axis      
-        std::vector<onboardDetector::box3D> filteredBBoxesBeforeYolo_; // filtered bboxes before yolo
-        std::vector<onboardDetector::box3D> filteredBBoxes_; // filtered bboxes
+        std::vector<joDetector::box3D> filteredBBoxesBeforeYolo_; // filtered bboxes before yolo
+        std::vector<joDetector::box3D> filteredBBoxes_; // filtered bboxes
         std::vector<std::vector<Eigen::Vector3d>> filteredPcClusters_; // pointcloud clusters after filtering by UV and DBSCAN fusion
         std::vector<Eigen::Vector3d> filteredPcClusterCenters_; // filtered pointcloud cluster centers
         std::vector<Eigen::Vector3d> filteredPcClusterStds_; // filtered pointcloud cluster standard deviation in each axis
-        std::vector<onboardDetector::box3D> visualBBoxes_; // visual bobxes detected by camera
-        std::vector<onboardDetector::box3D> lidarBBoxes_; // bboxes detected by lidar (have static and dynamic)
-        std::vector<onboardDetector::box3D> trackedBBoxes_; // bboxes tracked from kalman filtering
-        std::vector<onboardDetector::box3D> predictedBBoxesActive_;       // confirmed + matched last frame
-        std::vector<onboardDetector::box3D> predictedBBoxesMissed_;       // confirmed + coasting (no match)
-        std::vector<onboardDetector::box3D> predictedBBoxesUnconfirmed_;  // not yet confirmed
-        std::vector<onboardDetector::box3D> dynamicBBoxes_;            // boxes classified as dynamic
-        std::vector<onboardDetector::box3D> potentiallyDynamicBBoxes_; // YOLO-identified but KF speed ~ 0
+        std::vector<joDetector::box3D> visualBBoxes_; // visual bobxes detected by camera
+        std::vector<joDetector::box3D> lidarBBoxes_; // bboxes detected by lidar (have static and dynamic)
+        std::vector<joDetector::box3D> trackedBBoxes_; // bboxes tracked from kalman filtering
+        std::vector<joDetector::box3D> predictedBBoxesActive_;       // confirmed + matched last frame
+        std::vector<joDetector::box3D> predictedBBoxesMissed_;       // confirmed + coasting (no match)
+        std::vector<joDetector::box3D> predictedBBoxesUnconfirmed_;  // not yet confirmed
+        std::vector<joDetector::box3D> dynamicBBoxes_;            // boxes classified as dynamic
+        std::vector<joDetector::box3D> potentiallyDynamicBBoxes_; // YOLO-identified but KF speed ~ 0
 
         // TRACKING AND ASSOCIATION DATA
         bool newDetectFlag_;
-        std::vector<std::deque<onboardDetector::box3D>> boxHist_; // data association result: history of filtered bounding boxes for each box in current frame
+        std::vector<std::deque<joDetector::box3D>> boxHist_; // data association result: history of filtered bounding boxes for each box in current frame
         std::vector<std::deque<std::vector<Eigen::Vector3d>>> pcHist_; // data association result: history of filtered pc clusteres for each pc cluster in current frame
         std::vector<std::deque<Eigen::Vector3d>> pcCenterHist_; 
-        std::vector<onboardDetector::kalman_filter> filters_; // kalman filter for each objects
+        std::vector<joDetector::kalman_filter> filters_; // kalman filter for each objects
 
         // YOLO RESULTS
         vision_msgs::msg::Detection2DArray yoloDetectionResults_; // yolo detected 2D results
@@ -402,8 +402,8 @@ namespace onboardDetector{
         void registerCallback();
 
         // service
-        bool getDynamicObstacles(const std::shared_ptr<onboard_detector::srv::GetDynamicObstacles::Request> req,
-                     std::shared_ptr<onboard_detector::srv::GetDynamicObstacles::Response> res);
+        bool getDynamicObstacles(const std::shared_ptr<jo_detector::srv::GetDynamicObstacles::Request> req,
+                     std::shared_ptr<jo_detector::srv::GetDynamicObstacles::Response> res);
 
         // callback
         void depthPoseCB(const sensor_msgs::msg::Image::ConstSharedPtr& img, const geometry_msgs::msg::PoseStamped::ConstSharedPtr& pose);
@@ -422,52 +422,52 @@ namespace onboardDetector{
         void dbscanDetect();
         void lidarDetect();
         void filterLVBBoxes(); // filter lidar and vision bounding boxes
-        void transformUVBBoxes(std::vector<onboardDetector::box3D>& bboxes);
+        void transformUVBBoxes(std::vector<joDetector::box3D>& bboxes);
         
         // Visual DBSCAN Detector Functions
         void projectDepthImage();
         void filterPoints(const std::vector<Eigen::Vector3d>& points, std::vector<Eigen::Vector3d>& filteredPoints);
-        void clusterPointsAndBBoxes(const std::vector<Eigen::Vector3d>& points, std::vector<onboardDetector::box3D>& bboxes, std::vector<std::vector<Eigen::Vector3d>>& pcClusters, std::vector<Eigen::Vector3d>& pcClusterCenters, std::vector<Eigen::Vector3d>& pcClusterStds);
+        void clusterPointsAndBBoxes(const std::vector<Eigen::Vector3d>& points, std::vector<joDetector::box3D>& bboxes, std::vector<std::vector<Eigen::Vector3d>>& pcClusters, std::vector<Eigen::Vector3d>& pcClusterCenters, std::vector<Eigen::Vector3d>& pcClusterStds);
         void voxelFilter(const std::vector<Eigen::Vector3d>& points, std::vector<Eigen::Vector3d>& filteredPoints);
         
         // detection helper functions
         void calcPcFeat(const std::vector<Eigen::Vector3d>& pcCluster, Eigen::Vector3d& pcClusterCenter, Eigen::Vector3d& pcClusterStd);
-        double calBoxIOU(const onboardDetector::box3D& box1, const onboardDetector::box3D& box2, bool ignoreZmin=false);
-        double calBoxIOV(const onboardDetector::box3D& box1, const onboardDetector::box3D& box2, bool ignoreZmin=false);
+        double calBoxIOU(const joDetector::box3D& box1, const joDetector::box3D& box2, bool ignoreZmin=false);
+        double calBoxIOV(const joDetector::box3D& box1, const joDetector::box3D& box2, bool ignoreZmin=false);
 
         // Data association and tracking functions
         void boxAssociation(std::vector<int>& bestMatch);
         void boxAssociationHelper(std::vector<int>& bestMatch);
-        void BboxesMerger(const std::vector<onboardDetector::box3D>& group1BBoxes_, const std::vector<onboardDetector::box3D>& group2BBoxes_, const std::vector<std::vector<Eigen::Vector3d>>& group1pcClusters_, const std::vector<Eigen::Vector3d>& group1pcClusterCenters_, const std::vector<Eigen::Vector3d>& group1pcClusterStds_, const std::vector<std::vector<Eigen::Vector3d>>& group2pcClusters_, const std::vector<Eigen::Vector3d>& group2pcClusterCenters_, const std::vector<Eigen::Vector3d>& group2pcClusterStds_, std::vector<onboardDetector::box3D>& BBoxesTemp, std::vector<std::vector<Eigen::Vector3d>>& PcClustersTemp, std::vector<Eigen::Vector3d>& PcClusterCentersTemp, std::vector<Eigen::Vector3d>& PcClusterStdsTemp, std::string merging_style, bool flag_group1, bool flag_group2, double boxIOUThresh_, double boxIOVThresh_, bool leaf_only = false);
-        void mergeNestedGroup(const std::vector<onboardDetector::box3D>& inBoxes, const std::vector<std::vector<Eigen::Vector3d>>& inClusters, const std::vector<Eigen::Vector3d>& inCenters, const std::vector<Eigen::Vector3d>& inStds,     std::vector<onboardDetector::box3D>& outBoxes, std::vector<std::vector<Eigen::Vector3d>>& outClusters, std::vector<Eigen::Vector3d>& outCenters, std::vector<Eigen::Vector3d>& outStds);
-        void mergeBoxesSet(const std::vector<onboardDetector::box3D>& boxes, const std::vector<std::vector<Eigen::Vector3d>>& clusters, const std::vector<int>& indices, onboardDetector::box3D& outBox, std::vector<Eigen::Vector3d>& outCluster, Eigen::Vector3d& center, Eigen::Vector3d& stddev);
-        void findBestMatch(const std::vector<onboardDetector::box3D>& predictedBBoxes, const std::vector<onboardDetector::box3D>& previousObservedBBoxes, std::vector<int>& bestMatch);
+        void BboxesMerger(const std::vector<joDetector::box3D>& group1BBoxes_, const std::vector<joDetector::box3D>& group2BBoxes_, const std::vector<std::vector<Eigen::Vector3d>>& group1pcClusters_, const std::vector<Eigen::Vector3d>& group1pcClusterCenters_, const std::vector<Eigen::Vector3d>& group1pcClusterStds_, const std::vector<std::vector<Eigen::Vector3d>>& group2pcClusters_, const std::vector<Eigen::Vector3d>& group2pcClusterCenters_, const std::vector<Eigen::Vector3d>& group2pcClusterStds_, std::vector<joDetector::box3D>& BBoxesTemp, std::vector<std::vector<Eigen::Vector3d>>& PcClustersTemp, std::vector<Eigen::Vector3d>& PcClusterCentersTemp, std::vector<Eigen::Vector3d>& PcClusterStdsTemp, std::string merging_style, bool flag_group1, bool flag_group2, double boxIOUThresh_, double boxIOVThresh_, bool leaf_only = false);
+        void mergeNestedGroup(const std::vector<joDetector::box3D>& inBoxes, const std::vector<std::vector<Eigen::Vector3d>>& inClusters, const std::vector<Eigen::Vector3d>& inCenters, const std::vector<Eigen::Vector3d>& inStds,     std::vector<joDetector::box3D>& outBoxes, std::vector<std::vector<Eigen::Vector3d>>& outClusters, std::vector<Eigen::Vector3d>& outCenters, std::vector<Eigen::Vector3d>& outStds);
+        void mergeBoxesSet(const std::vector<joDetector::box3D>& boxes, const std::vector<std::vector<Eigen::Vector3d>>& clusters, const std::vector<int>& indices, joDetector::box3D& outBox, std::vector<Eigen::Vector3d>& outCluster, Eigen::Vector3d& center, Eigen::Vector3d& stddev);
+        void findBestMatch(const std::vector<joDetector::box3D>& predictedBBoxes, const std::vector<joDetector::box3D>& previousObservedBBoxes, std::vector<int>& bestMatch);
         void kalmanFilterAndUpdateHist(const std::vector<int>& bestMatch);
-        void kalmanFilterMatrixAccV2(const onboardDetector::box3D& currDetectedBBox, MatrixXd& states, MatrixXd& A, MatrixXd& B, MatrixXd& H, MatrixXd& P, MatrixXd& Q, MatrixXd& R);
-        void getKalmanObservationAccV2(const onboardDetector::box3D& currDetectedBBox, MatrixXd& Z);
-        double computeBoxIoU2D(const onboardDetector::box3D& boxA, const onboardDetector::box3D& boxB) const;
-        void getPredictedBBoxesFromFilters(std::vector<onboardDetector::box3D>& propedBBoxes, std::vector<Eigen::Vector3d>& propedPcCenters);
+        void kalmanFilterMatrixAccV2(const joDetector::box3D& currDetectedBBox, MatrixXd& states, MatrixXd& A, MatrixXd& B, MatrixXd& H, MatrixXd& P, MatrixXd& Q, MatrixXd& R);
+        void getKalmanObservationAccV2(const joDetector::box3D& currDetectedBBox, MatrixXd& Z);
+        double computeBoxIoU2D(const joDetector::box3D& boxA, const joDetector::box3D& boxB) const;
+        void getPredictedBBoxesFromFilters(std::vector<joDetector::box3D>& propedBBoxes, std::vector<Eigen::Vector3d>& propedPcCenters);
         void populatePredictionVisualizationBBoxes();
-        bool isCloseToExistingTrack(const onboardDetector::box3D& currDetectedBBox, const Eigen::Vector3d& currPcCenter, const std::vector<bool>& prevMatched);
-        double computeRelativeSizeDiff(const onboardDetector::box3D& a, const onboardDetector::box3D& b) const;
-        bool areBoxesDuplicate2D(const onboardDetector::box3D& a, const onboardDetector::box3D& b) const;
-        bool isDuplicateOfTrackedThisFrame(const onboardDetector::box3D& currDetectedBBox, const std::vector<onboardDetector::box3D>& trackedBBoxesTemp, int& duplicateTrackId) const;
-        bool isDetectionDuplicateOfPrediction(const onboardDetector::box3D& currDetectedBBox, const onboardDetector::box3D& predictedBox, double& centerDist, double& iou2d, double& relSizeDiff) const;
-        double computeAssociationScore(const onboardDetector::box3D& predictedBox, const onboardDetector::box3D& previousObservedBox, const onboardDetector::box3D& currentBox, double dt, double& predPosDist, double& requiredSpeed, double& relSizeDiff, double& predIou2d, double& prevObsPosDist, double& prevObsIou2d, std::string& rejectReason) const;
+        bool isCloseToExistingTrack(const joDetector::box3D& currDetectedBBox, const Eigen::Vector3d& currPcCenter, const std::vector<bool>& prevMatched);
+        double computeRelativeSizeDiff(const joDetector::box3D& a, const joDetector::box3D& b) const;
+        bool areBoxesDuplicate2D(const joDetector::box3D& a, const joDetector::box3D& b) const;
+        bool isDuplicateOfTrackedThisFrame(const joDetector::box3D& currDetectedBBox, const std::vector<joDetector::box3D>& trackedBBoxesTemp, int& duplicateTrackId) const;
+        bool isDetectionDuplicateOfPrediction(const joDetector::box3D& currDetectedBBox, const joDetector::box3D& predictedBox, double& centerDist, double& iou2d, double& relSizeDiff) const;
+        double computeAssociationScore(const joDetector::box3D& predictedBox, const joDetector::box3D& previousObservedBox, const joDetector::box3D& currentBox, double dt, double& predPosDist, double& requiredSpeed, double& relSizeDiff, double& predIou2d, double& prevObsPosDist, double& prevObsIou2d, std::string& rejectReason) const;
         double clampPositive(double value, double minValue) const;
-        void getPreviousObservedBBoxes(std::vector<onboardDetector::box3D>& previousObservedBBoxes) const;
+        void getPreviousObservedBBoxes(std::vector<joDetector::box3D>& previousObservedBBoxes) const;
         bool tryAugmentDetectionMatch(int detIdx, const std::vector<std::vector<int>>& candidatePrevIdxByCurr, std::vector<int>& assignedPrevToCurr, std::vector<int>& assignedCurrToPrev, std::vector<int>& visitTokenByPrev, int visitToken) const;
-        void assignMatchesGlobally(const std::vector<onboardDetector::matchCandidate>& candidates, int numCurr, int numPrev, std::vector<int>& bestMatch) const;
-        bool isNaturalMotion(int trackIdx, const onboardDetector::box3D& currDetectedBBox) const;
-        bool shouldConfirmTrack(int trackIdx, const onboardDetector::box3D& currDetectedBBox, int newHitStreak) const;
-        double computeVelocityDirectionError(int trackIdx, const onboardDetector::box3D& currDetectedBBox) const;
-        bool passesVelocityDirectionGate(int trackIdx, const onboardDetector::box3D& currDetectedBBox, bool alreadyConfirmed, bool yoloExempt = false) const;
+        void assignMatchesGlobally(const std::vector<joDetector::matchCandidate>& candidates, int numCurr, int numPrev, std::vector<int>& bestMatch) const;
+        bool isNaturalMotion(int trackIdx, const joDetector::box3D& currDetectedBBox) const;
+        bool shouldConfirmTrack(int trackIdx, const joDetector::box3D& currDetectedBBox, int newHitStreak) const;
+        double computeVelocityDirectionError(int trackIdx, const joDetector::box3D& currDetectedBBox) const;
+        bool passesVelocityDirectionGate(int trackIdx, const joDetector::box3D& currDetectedBBox, bool alreadyConfirmed, bool yoloExempt = false) const;
         bool isTrackConfirmedByIdx(int trackIdx) const;
-        double getAdaptiveMaxInnovation(int trackIdx, const onboardDetector::box3D& currDetectedBBox) const;
-        double getAdaptiveMinMatchScore(int trackIdx, const onboardDetector::box3D& currentBox) const;
-        double computeObservedSpeedOverWindow(int trackIdx, const onboardDetector::box3D& currDetectedBBox, int window) const;
-        bool isLidarOnlyOutsideFovAssociation(const onboardDetector::box3D& predictedBox, const onboardDetector::box3D& currentBox) const;
-        bool isAbruptTurnAllowedOutsideFov(int trackIdx, const onboardDetector::box3D& predictedBox, const onboardDetector::box3D& currentBox, double dt) const;
+        double getAdaptiveMaxInnovation(int trackIdx, const joDetector::box3D& currDetectedBBox) const;
+        double getAdaptiveMinMatchScore(int trackIdx, const joDetector::box3D& currentBox) const;
+        double computeObservedSpeedOverWindow(int trackIdx, const joDetector::box3D& currDetectedBBox, int window) const;
+        bool isLidarOnlyOutsideFovAssociation(const joDetector::box3D& predictedBox, const joDetector::box3D& currentBox) const;
+        bool isAbruptTurnAllowedOutsideFov(int trackIdx, const joDetector::box3D& predictedBox, const joDetector::box3D& currentBox, double dt) const;
         bool hasConsistentObservedMotionOutsideFov(int trackIdx, int window, double& netDisp, double& netSpeed, double& pathLen, double& straightness, double& maxStepSpeed) const;
         
         // visualization
@@ -475,7 +475,7 @@ namespace onboardDetector{
         void publishUVImages(); 
         void publishColorImages();
         void publishPoints(const std::vector<Eigen::Vector3d>& points, const rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr& publisher);
-        void publish3dBox(const std::vector<onboardDetector::box3D>& bboxes, const rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr& publisher, double r, double g, double b, double a = 1.0, bool highlightYolo = false, bool useClassificationColors = true, double lifetimeSeconds = -1.0);
+        void publish3dBox(const std::vector<joDetector::box3D>& bboxes, const rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr& publisher, double r, double g, double b, double a = 1.0, bool highlightYolo = false, bool useClassificationColors = true, double lifetimeSeconds = -1.0);
         void publishHistoryTraj();
         void publishVelVis();
         void publishLidarClusters();
@@ -489,7 +489,7 @@ namespace onboardDetector{
         void transformBBox(const Eigen::Vector3d& center, const Eigen::Vector3d& size, const Eigen::Vector3d& position, const Eigen::Matrix3d& orientation, Eigen::Vector3d& newCenter, Eigen::Vector3d& newSize);
 
         // user functions
-        void getDynamicObstacles(std::vector<onboardDetector::box3D>& incomeDynamicBBoxes, const Eigen::Vector3d &robotSize = Eigen::Vector3d(0.0,0.0,0.0));
+        void getDynamicObstacles(std::vector<joDetector::box3D>& incomeDynamicBBoxes, const Eigen::Vector3d &robotSize = Eigen::Vector3d(0.0,0.0,0.0));
         // inline helper functions
         bool isInFilterRange(const Eigen::Vector3d& pos);
         bool isInCameraFOV(const Eigen::Vector3d& worldPoint) const;
@@ -504,10 +504,10 @@ namespace onboardDetector{
         void getLidarPose(const nav_msgs::msg::Odometry::ConstSharedPtr& odom, Eigen::Matrix4d& lidarPoseMatrix);
         bool lookupTfMatrix(const std::string& targetFrame, const std::string& sourceFrame, Eigen::Matrix4d& transformMatrix);
         bool ensureStaticTfs();
-        onboardDetector::Point eigenToDBPoint(const Eigen::Vector3d& p);
-        Eigen::Vector3d dbPointToEigen(const onboardDetector::Point& pDB);
-        void eigenToDBPointVec(const std::vector<Eigen::Vector3d>& points, std::vector<onboardDetector::Point>& pointsDB, int size);       
-        bool isOversizedBBox(const onboardDetector::box3D& bbox) const;
+        joDetector::Point eigenToDBPoint(const Eigen::Vector3d& p);
+        Eigen::Vector3d dbPointToEigen(const joDetector::Point& pDB);
+        void eigenToDBPointVec(const std::vector<Eigen::Vector3d>& points, std::vector<joDetector::Point>& pointsDB, int size);       
+        bool isOversizedBBox(const joDetector::box3D& bbox) const;
     };
 
 
@@ -671,8 +671,8 @@ namespace onboardDetector{
         return ok;
     }
 
-    inline onboardDetector::Point dynamicDetector::eigenToDBPoint(const Eigen::Vector3d& p){
-        onboardDetector::Point pDB;
+    inline joDetector::Point dynamicDetector::eigenToDBPoint(const Eigen::Vector3d& p){
+        joDetector::Point pDB;
         pDB.x = p(0);
         pDB.y = p(1);
         pDB.z = p(2);
@@ -680,7 +680,7 @@ namespace onboardDetector{
         return pDB;
     }
 
-    inline Eigen::Vector3d dynamicDetector::dbPointToEigen(const onboardDetector::Point& pDB){
+    inline Eigen::Vector3d dynamicDetector::dbPointToEigen(const joDetector::Point& pDB){
         Eigen::Vector3d p;
         p(0) = pDB.x;
         p(1) = pDB.y;
@@ -688,10 +688,10 @@ namespace onboardDetector{
         return p;
     }
 
-    inline void dynamicDetector::eigenToDBPointVec(const std::vector<Eigen::Vector3d>& points, std::vector<onboardDetector::Point>& pointsDB, int size){
+    inline void dynamicDetector::eigenToDBPointVec(const std::vector<Eigen::Vector3d>& points, std::vector<joDetector::Point>& pointsDB, int size){
         for (int i=0; i<size; ++i){
             Eigen::Vector3d p = points[i];
-            onboardDetector::Point pDB = this->eigenToDBPoint(p);
+            joDetector::Point pDB = this->eigenToDBPoint(p);
             pointsDB.push_back(pDB);
         }
     }

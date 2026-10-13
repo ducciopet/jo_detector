@@ -15,7 +15,7 @@
 #define DBSCAN_SUCCESS 0
 #define DBSCAN_FAILURE -3
 
-namespace onboardDetector {
+namespace joDetector {
 
     typedef struct Point_
     {
@@ -136,6 +136,6 @@ namespace onboardDetector {
                                      std::vector<std::vector<Eigen::Vector3d>>& subclusters) const;
     };
 
-} // namespace onboardDetector
+} // namespace joDetector
 
 #endif // DBSCAN_H

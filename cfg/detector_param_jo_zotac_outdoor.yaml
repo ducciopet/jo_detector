@@ -60,7 +60,7 @@ wall_detector_node:
 # =========================================================================
 detector_node:
   ros__parameters:
-    onboard_detector:
+    jo_detector:
 
       localization_mode: 1  # 0: use pose topic (default); 1: use odometry topic
 
@@ -354,7 +354,7 @@ calibration_icp_node:
     recalibration_period_sec: 0.0          # 0 = one-shot calibration only (default). >0 = after the initial
                                             # one-shot calibration, re-run registration every N seconds and
                                             # replace camera_refined only when the new result is VALID.
-    onboard_detector:
+    jo_detector:
       depth_intrinsics: [436.9647521972656, 436.9647521972656, 431.9205627441406, 240.13380432128906] # [fx, fy, cx, cy]
       depth_scale_factor: 1000.0           # raw_value / scale = meters
       depth_min_value: 0.5                 # [m]

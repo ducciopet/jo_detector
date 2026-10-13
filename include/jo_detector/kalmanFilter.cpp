@@ -3,10 +3,10 @@
     --------------------------------------
     function definition of kalman_filter velocity estimator
 */
-#include <onboard_detector/kalmanFilter.h>
+#include <jo_detector/kalmanFilter.h>
 using Eigen::MatrixXd;
 
-namespace onboardDetector{
+namespace joDetector{
     kalman_filter::kalman_filter()
     {
         this->is_initialized = false;

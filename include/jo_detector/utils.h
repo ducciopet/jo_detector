@@ -4,8 +4,8 @@
  	function utils for detectors
  */
 
-#ifndef ONBOARD_DETECTOR_UTILS_H
-#define ONBOARD_DETECTOR_UTILS_H
+#ifndef JO_DETECTOR_UTILS_H
+#define JO_DETECTOR_UTILS_H
 #include <iomanip>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
@@ -15,7 +15,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace onboardDetector{
+namespace joDetector{
     const double PI_const = 3.1415926;
 
     struct Node
